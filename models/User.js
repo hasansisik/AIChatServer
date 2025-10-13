@@ -142,7 +142,18 @@ const UserSchema = new mongoose.Schema(
       totalVotes: { type: Number, default: 0 },
       totalCreatedTests: { type: Number, default: 0 },
       favoriteCategory: { type: String }
-    }
+    },
+    // Kupon sistemi - sadece kullanılan kuponları takip et
+    usedCoupons: [{
+      coupon: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'Coupon' 
+      },
+      usedAt: { 
+        type: Date, 
+        default: Date.now 
+      }
+    }]
   },
   { timestamps: true }
 );

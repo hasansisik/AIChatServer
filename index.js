@@ -14,6 +14,7 @@ const connectDB = require('./config/connectDB');
 
 //routers
 const authRouter = require('./routers/auth');
+const couponRouter = require('./routers/coupon');
 
 //midlleware
 const notFoundMiddleware = require('./middleware/not-found')
@@ -64,6 +65,7 @@ app.use(express.static('./public'));
 app.use(express.urlencoded({ extended: true }));
 
 app.use('/v1/auth', authRouter);
+app.use('/v1/coupons', couponRouter);
 
 app.use(notFoundMiddleware);
 app.use(erorHandlerMiddleware);

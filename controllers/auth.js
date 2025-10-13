@@ -1180,6 +1180,136 @@ const updateUserStatus = async (req, res, next) => {
   }
 };
 
+//Create Admin User (Admin only)
+const createAdminUser = async (req, res, next) => {
+  try {
+    const {
+      name,
+      surname,
+      email,
+      password,
+      role = 'user', // Default role is user, can be changed to admin
+      status = 'active'
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !surname || !email || !password) {
+      throw new CustomError.BadRequestError("Lütfen tüm gerekli alanları doldurun");
+    }
+
+    // Check if email already exists
+    const emailAlreadyExists = await User.findOne({ email });
+    if (emailAlreadyExists) {
+      throw new CustomError.BadRequestError("Bu e-posta adresi zaten kayıtlı");
+    }
+
+    // Create Auth document
+    const auth = new Auth({
+      password,
+      verificationCode: undefined, // Admin created users don't need verification
+    });
+    await auth.save();
+
+    // Create Profile document
+    const profile = new Profile({
+      picture: "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+    });
+    await profile.save();
+
+    // Create User with references
+    const user = new User({
+      name,
+      surname,
+      email,
+      username: email.split("@")[0],
+      auth: auth._id,
+      profile: profile._id,
+      isVerified: true, // Admin created users are automatically verified
+      status: status,
+      role: role,
+    });
+
+    await user.save();
+
+    // Update auth and profile with user reference
+    auth.user = user._id;
+    profile.user = user._id;
+    await Promise.all([auth.save(), profile.save()]);
+
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "Kullanıcı başarıyla oluşturuldu",
+      user: {
+        _id: user._id,
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+//Update User (Admin only)
+const updateUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, surname, email, role, status } = req.body;
+
+    // Validate required fields
+    if (!name || !surname || !email) {
+      throw new CustomError.BadRequestError("Lütfen tüm gerekli alanları doldurun");
+    }
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      throw new CustomError.NotFoundError("Kullanıcı bulunamadı");
+    }
+
+    // Check if email is being changed and if it already exists
+    if (email !== user.email) {
+      const emailAlreadyExists = await User.findOne({ email, _id: { $ne: id } });
+      if (emailAlreadyExists) {
+        throw new CustomError.BadRequestError("Bu e-posta adresi zaten kayıtlı");
+      }
+    }
+
+    // Update user fields
+    user.name = name;
+    user.surname = surname;
+    user.email = email;
+    user.username = email.split("@")[0];
+    
+    if (role) user.role = role;
+    if (status) user.status = status;
+
+    await user.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Kullanıcı başarıyla güncellendi",
+      user: {
+        _id: user._id,
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        isVerified: user.isVerified,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   googleRegister,
@@ -1198,4 +1328,6 @@ module.exports = {
   deleteUser,
   updateUserRole,
   updateUserStatus,
+  createAdminUser,
+  updateUser,
 };

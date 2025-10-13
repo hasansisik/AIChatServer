@@ -17,7 +17,6 @@ const register = async (req, res, next) => {
       courseTrial,
       picture,
       expoPushToken,
-      age,
     } = req.body;
 
     //check email
@@ -51,7 +50,6 @@ const register = async (req, res, next) => {
       username: email.split("@")[0],
       courseTrial,
       expoPushToken,
-      age,
       auth: auth._id,
       profile: profile._id,
       isVerified: false,

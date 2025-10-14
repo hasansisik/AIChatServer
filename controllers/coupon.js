@@ -16,31 +16,25 @@ const generateCouponCode = () => {
   return result;
 };
 
+
 // Create Coupon (Admin only)
 const createCoupon = async (req, res, next) => {
   try {
     const {
       code,
-      description,
-      discountType = 'percentage',
-      discountValue,
       validUntil,
       usageLimit
     } = req.body;
-
-    // Validate required fields
-    if (!discountValue || discountValue <= 0) {
-      throw new CustomError.BadRequestError("İndirim değeri 0'dan büyük olmalıdır");
-    }
-
-    if (discountType === 'percentage' && discountValue > 100) {
-      throw new CustomError.BadRequestError("Yüzde indirimi %100'den fazla olamaz");
-    }
 
     // Generate code if not provided
     let couponCode = code;
     if (!couponCode) {
       couponCode = generateCouponCode();
+    }
+
+    // Ensure code starts with KM
+    if (!couponCode.toUpperCase().startsWith('KM')) {
+      throw new CustomError.BadRequestError("Kupon kodu KM ile başlamalıdır");
     }
 
     // Check if code already exists
@@ -52,9 +46,6 @@ const createCoupon = async (req, res, next) => {
     // Create coupon
     const coupon = new Coupon({
       code: couponCode.toUpperCase(),
-      description,
-      discountType,
-      discountValue,
       validUntil: validUntil ? new Date(validUntil) : null,
       usageLimit: usageLimit || null,
       createdBy: req.user.userId
@@ -68,9 +59,6 @@ const createCoupon = async (req, res, next) => {
       coupon: {
         _id: coupon._id,
         code: coupon.code,
-        description: coupon.description,
-        discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
         validUntil: coupon.validUntil,
         usageLimit: coupon.usageLimit,
         usedCount: coupon.usedCount,
@@ -99,8 +87,7 @@ const getAllCoupons = async (req, res, next) => {
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
-        { code: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { code: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -160,9 +147,6 @@ const updateCoupon = async (req, res, next) => {
     const { id } = req.params;
     const {
       code,
-      description,
-      discountType,
-      discountValue,
       validUntil,
       usageLimit,
       status
@@ -176,6 +160,11 @@ const updateCoupon = async (req, res, next) => {
 
     // Check if code is being changed and if it already exists
     if (code && code !== coupon.code) {
+      // Ensure code starts with KM
+      if (!code.toUpperCase().startsWith('KM')) {
+        throw new CustomError.BadRequestError("Kupon kodu KM ile başlamalıdır");
+      }
+      
       const existingCoupon = await Coupon.findOne({ code: code.toUpperCase(), _id: { $ne: id } });
       if (existingCoupon) {
         throw new CustomError.BadRequestError("Bu kupon kodu zaten kullanılıyor");
@@ -184,9 +173,6 @@ const updateCoupon = async (req, res, next) => {
 
     // Update coupon fields
     if (code) coupon.code = code.toUpperCase();
-    if (description !== undefined) coupon.description = description;
-    if (discountType) coupon.discountType = discountType;
-    if (discountValue !== undefined) coupon.discountValue = discountValue;
     if (validUntil !== undefined) coupon.validUntil = validUntil ? new Date(validUntil) : null;
     if (usageLimit !== undefined) coupon.usageLimit = usageLimit;
     if (status) coupon.status = status;
@@ -199,9 +185,6 @@ const updateCoupon = async (req, res, next) => {
       coupon: {
         _id: coupon._id,
         code: coupon.code,
-        description: coupon.description,
-        discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
         validUntil: coupon.validUntil,
         usageLimit: coupon.usageLimit,
         usedCount: coupon.usedCount,

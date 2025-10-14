@@ -86,9 +86,6 @@ const register = async (req, res, next) => {
       verificationCode,
     });
 
-    // Send welcome notification (async, don't wait)
-    sendWelcomeNotification(user._id).catch(console.error);
-
     res.json({
       message:
         "Kullanıcı başarıyla oluşturuldu. Lütfen email adresini doğrula.",
@@ -197,6 +194,7 @@ const login = async (req, res, next) => {
         name: user.name,
         surname: user.surname,
         email: user.email,
+        role: user.role,
         picture:
           user.profile?.picture ||
           "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
@@ -857,11 +855,6 @@ const googleAuth = async (req, res, next) => {
     });
 
     await token.save();
-
-    // Send welcome notification for new users (async, don't wait)
-    if (isNewUser) {
-      sendWelcomeNotification(user._id).catch(console.error);
-    }
 
     res.json({
       message: isNewUser ? "Google ile kayıt başarılı." : "Google ile giriş başarılı.",

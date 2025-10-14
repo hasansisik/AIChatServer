@@ -8,20 +8,6 @@ const couponSchema = new mongoose.Schema({
     uppercase: true,
     trim: true
   },
-  description: {
-    type: String,
-    trim: true
-  },
-  discountType: {
-    type: String,
-    enum: ['percentage', 'fixed'],
-    default: 'percentage'
-  },
-  discountValue: {
-    type: Number,
-    required: true,
-    min: 0
-  },
   validUntil: {
     type: Date,
     default: null // null means infinite validity

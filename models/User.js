@@ -153,7 +153,38 @@ const UserSchema = new mongoose.Schema(
         type: Date, 
         default: Date.now 
       }
-    }]
+    }],
+    // Onboarding data
+    onboardingData: {
+      interest: { 
+        type: String, 
+        enum: ['dil-ogrenmek', 'sohbet'],
+        default: null 
+      },
+      mainGoal: { 
+        type: String, 
+        enum: ['konusma', 'yazma', 'dinleme', 'okuma', 'gramer', 'kelime'],
+        default: null 
+      },
+      reason: { 
+        type: String, 
+        enum: ['is', 'seyahat', 'okul', 'aile', 'arkadas', 'hobi'],
+        default: null 
+      },
+      favorites: [{
+        type: String,
+        enum: ['muzik', 'film', 'kitap', 'spor', 'sanat', 'teknoloji', 'yemek', 'seyahat', 'oyun', 'dogal', 'moda', 'bilim']
+      }],
+      completedAt: { 
+        type: Date, 
+        default: null 
+      }
+    },
+    // Onboarding completion status
+    isOnboardingCompleted: { 
+      type: Boolean, 
+      default: false 
+    }
   },
   { timestamps: true }
 );

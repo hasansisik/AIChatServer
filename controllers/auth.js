@@ -234,7 +234,10 @@ const getMyProfile = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      user,
+      user: {
+        ...user.toObject(),
+        isOnboardingCompleted: user.isOnboardingCompleted
+      },
     });
   } catch (error) {
     next(error);
@@ -1303,6 +1306,45 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+//Update Onboarding Data
+const updateOnboardingData = async (req, res, next) => {
+  try {
+    const { interest, mainGoal, reason, favorites } = req.body;
+    const userId = req.user.userId;
+
+    // Validate required fields
+    if (!interest || !mainGoal || !reason || !favorites || !Array.isArray(favorites)) {
+      throw new CustomError.BadRequestError("Lütfen tüm gerekli alanları doldurun");
+    }
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new CustomError.NotFoundError("Kullanıcı bulunamadı");
+    }
+
+    // Update onboarding data
+    user.onboardingData = {
+      interest,
+      mainGoal,
+      reason,
+      favorites,
+      completedAt: new Date()
+    };
+    user.isOnboardingCompleted = true;
+
+    await user.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Onboarding verileri başarıyla kaydedildi",
+      onboardingData: user.onboardingData
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   googleRegister,
@@ -1323,4 +1365,5 @@ module.exports = {
   updateUserStatus,
   createAdminUser,
   updateUser,
+  updateOnboardingData,
 };

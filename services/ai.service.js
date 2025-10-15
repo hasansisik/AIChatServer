@@ -5,7 +5,9 @@ const path = require('path');
 class AIService {
   constructor() {
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: 10000, // 10 saniye timeout
+      maxRetries: 2 // Maksimum 2 retry
     });
   }
 
@@ -89,17 +91,18 @@ class AIService {
         messages: [
           {
             role: 'system',
-            content: 'Sen yardımcı bir AI asistanısın. Kısa, net ve Türkçe cevaplar ver. Maksimum 100 kelime kullan.'
+            content: 'Sen yardımcı bir AI asistanısın. Kısa, net ve Türkçe cevaplar ver. Maksimum 50 kelime kullan.'
           },
           {
             role: 'user',
             content: text
           }
         ],
-        max_tokens: 150, // Maliyeti düşürmek için
-        temperature: 0.7,
-        presence_penalty: 0.1,
-        frequency_penalty: 0.1
+        max_tokens: 80, // Daha kısa yanıtlar için
+        temperature: 0.5, // Daha deterministik
+        presence_penalty: 0,
+        frequency_penalty: 0,
+        stream: false // Streaming kapalı
       });
 
       console.log('🤖 AI: OpenAI yanıtı alındı:', completion);
@@ -137,7 +140,8 @@ class AIService {
         model: 'tts-1', // En ucuz TTS modeli
         voice: 'alloy', // En ucuz ses
         input: text,
-        response_format: 'mp3'
+        response_format: 'mp3',
+        speed: 1 // %20 daha hızlı konuşma
       });
 
       console.log('🔊 TTS: OpenAI yanıtı alındı, buffer oluşturuluyor...');

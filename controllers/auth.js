@@ -434,6 +434,7 @@ const editProfile = async (req, res) => {
       "address",
       "phoneNumber",
       "courseTrial",
+      "courseCode",
       "picture",
       "birthDate",
       "age",
@@ -485,6 +486,7 @@ const editProfile = async (req, res) => {
     if (req.body.name) user.name = req.body.name;
     if (req.body.surname) user.surname = req.body.surname;
     if (req.body.courseTrial) user.courseTrial = req.body.courseTrial;
+    if (req.body.courseCode !== undefined) user.courseCode = req.body.courseCode ? req.body.courseCode.toUpperCase().trim() : null;
     if (req.body.theme) user.theme = req.body.theme;
 
     // Handle new profile fields
@@ -618,9 +620,6 @@ const editProfile = async (req, res) => {
     const updatedUser = await User.findById(user._id)
       .populate("profile")
       .populate("address");
-
-    // Send profile update notification (async, don't wait)
-    sendProfileUpdateNotification(user._id).catch(console.error);
 
     res.json({
       message: "Profil başarıyla güncellendi.",
@@ -1284,6 +1283,7 @@ const updateUser = async (req, res, next) => {
     
     if (role) user.role = role;
     if (status) user.status = status;
+    if (req.body.courseCode !== undefined) user.courseCode = req.body.courseCode ? req.body.courseCode.toUpperCase().trim() : null;
 
     await user.save();
 

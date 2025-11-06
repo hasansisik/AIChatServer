@@ -5,15 +5,14 @@ const CustomError = require("../errors");
 
 // Generate unique coupon code
 const generateCouponCode = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = 'KM';
+  // 4 prefix seçeneği: KMY, KMS, KMP, KM
+  const prefixes = ['KMY', 'KMS', 'KMP', 'KM'];
+  const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
   
-  // Generate exactly 4 characters after KM
-  for (let i = 0; i < 4; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  // 5 haneli random sayı oluştur
+  const randomNumber = Math.floor(10000 + Math.random() * 90000); // 10000-99999 arası
   
-  return result;
+  return `${randomPrefix}${randomNumber}`;
 };
 
 
@@ -23,7 +22,8 @@ const createCoupon = async (req, res, next) => {
     const {
       code,
       validUntil,
-      usageLimit
+      usageLimit,
+      userIds
     } = req.body;
 
     // Generate code if not provided
@@ -32,9 +32,11 @@ const createCoupon = async (req, res, next) => {
       couponCode = generateCouponCode();
     }
 
-    // Ensure code starts with KM
-    if (!couponCode.toUpperCase().startsWith('KM')) {
-      throw new CustomError.BadRequestError("Kupon kodu KM ile başlamalıdır");
+    // Ensure code starts with KM, KMY, KMS, or KMP
+    const validPrefixes = ['KM', 'KMY', 'KMS', 'KMP'];
+    const codePrefix = couponCode.toUpperCase().substring(0, couponCode.length >= 3 ? 3 : 2);
+    if (!validPrefixes.some(prefix => couponCode.toUpperCase().startsWith(prefix))) {
+      throw new CustomError.BadRequestError("Kupon kodu KM, KMY, KMS veya KMP ile başlamalıdır");
     }
 
     // Check if code already exists
@@ -52,6 +54,19 @@ const createCoupon = async (req, res, next) => {
     });
 
     await coupon.save();
+
+    // If userIds provided, update users' courseCode
+    if (userIds && Array.isArray(userIds) && userIds.length > 0) {
+      try {
+        await User.updateMany(
+          { _id: { $in: userIds } },
+          { $set: { courseCode: couponCode.toUpperCase() } }
+        );
+      } catch (userUpdateError) {
+        console.error("Error updating users' courseCode:", userUpdateError);
+        // Don't fail the coupon creation if user update fails
+      }
+    }
 
     res.status(StatusCodes.CREATED).json({
       success: true,
@@ -96,7 +111,14 @@ const getAllCoupons = async (req, res, next) => {
     
     // Get coupons with pagination
     const coupons = await Coupon.find(filter)
-      .populate('createdBy', 'name surname email')
+      .populate({
+        path: 'createdBy',
+        select: 'name surname email',
+        populate: {
+          path: 'profile',
+          select: 'picture'
+        }
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -149,7 +171,8 @@ const updateCoupon = async (req, res, next) => {
       code,
       validUntil,
       usageLimit,
-      status
+      status,
+      userIds
     } = req.body;
 
     // Check if coupon exists
@@ -160,9 +183,10 @@ const updateCoupon = async (req, res, next) => {
 
     // Check if code is being changed and if it already exists
     if (code && code !== coupon.code) {
-      // Ensure code starts with KM
-      if (!code.toUpperCase().startsWith('KM')) {
-        throw new CustomError.BadRequestError("Kupon kodu KM ile başlamalıdır");
+      // Ensure code starts with KM, KMY, KMS, or KMP
+      const validPrefixes = ['KM', 'KMY', 'KMS', 'KMP'];
+      if (!validPrefixes.some(prefix => code.toUpperCase().startsWith(prefix))) {
+        throw new CustomError.BadRequestError("Kupon kodu KM, KMY, KMS veya KMP ile başlamalıdır");
       }
       
       const existingCoupon = await Coupon.findOne({ code: code.toUpperCase(), _id: { $ne: id } });
@@ -172,12 +196,26 @@ const updateCoupon = async (req, res, next) => {
     }
 
     // Update coupon fields
-    if (code) coupon.code = code.toUpperCase();
+    const finalCode = code ? code.toUpperCase() : coupon.code;
+    if (code) coupon.code = finalCode;
     if (validUntil !== undefined) coupon.validUntil = validUntil ? new Date(validUntil) : null;
     if (usageLimit !== undefined) coupon.usageLimit = usageLimit;
     if (status) coupon.status = status;
 
     await coupon.save();
+
+    // If userIds provided, update users' courseCode
+    if (userIds && Array.isArray(userIds) && userIds.length > 0) {
+      try {
+        await User.updateMany(
+          { _id: { $in: userIds } },
+          { $set: { courseCode: finalCode } }
+        );
+      } catch (userUpdateError) {
+        console.error("Error updating users' courseCode:", userUpdateError);
+        // Don't fail the coupon update if user update fails
+      }
+    }
 
     res.status(StatusCodes.OK).json({
       success: true,

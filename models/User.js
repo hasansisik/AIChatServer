@@ -103,6 +103,12 @@ const UserSchema = new mongoose.Schema(
     conversations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Conversation' }],
     expoPushToken: { type: String },
     courseTrial: { type: String },
+    courseCode: { 
+      type: String, 
+      trim: true,
+      uppercase: true,
+      default: null
+    },
     status: {
       type: String,
       enum: {

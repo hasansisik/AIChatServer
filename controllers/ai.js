@@ -1,5 +1,32 @@
 const aiService = require('../services/ai.service');
 const { StatusCodes } = require('http-status-codes');
+const fs = require('fs');
+const path = require('path');
+
+// Eski audio dosyalarını temizle (1 saatten eski dosyalar)
+const cleanupOldAudioFiles = (publicDir) => {
+  try {
+    if (!fs.existsSync(publicDir)) return;
+    
+    const files = fs.readdirSync(publicDir);
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000; // 1 saat
+    
+    files.forEach(file => {
+      const filePath = path.join(publicDir, file);
+      const stats = fs.statSync(filePath);
+      const fileAge = now - stats.mtimeMs;
+      
+      // 1 saatten eski dosyaları sil
+      if (fileAge > oneHour) {
+        fs.unlinkSync(filePath);
+        console.log('🧹 Eski audio dosyası silindi:', file);
+      }
+    });
+  } catch (error) {
+    console.error('❌ Audio dosyası temizleme hatası:', error);
+  }
+};
 
 // Ses kaydını işle ve AI yanıtı al
 const processVoiceMessage = async (req, res) => {
@@ -38,10 +65,30 @@ const processVoiceMessage = async (req, res) => {
       });
     }
 
-    // Başarılı yanıt
+    // Başarılı yanıt - Audio dosyasını kaydet ve URL döndür
     console.log('✅ Controller: Başarılı yanıt hazırlanıyor');
-    const audioUrl = `data:audio/mp3;base64,${result.audioBuffer.toString('base64')}`;
-    console.log('✅ Controller: Audio URL oluşturuldu, boyut:', audioUrl.length, 'karakter');
+    
+    // Public klasörü yoksa oluştur
+    const publicDir = path.join(__dirname, '..', 'public', 'audio');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    
+    // Eski dosyaları temizle (async olarak, beklemeden devam et)
+    setImmediate(() => cleanupOldAudioFiles(publicDir));
+    
+    // Unique dosya adı oluştur
+    const fileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`;
+    const filePath = path.join(publicDir, fileName);
+    
+    // Audio buffer'ı dosyaya kaydet (sync - hızlı)
+    fs.writeFileSync(filePath, result.audioBuffer);
+    console.log('✅ Controller: Audio dosyası kaydedildi:', fileName);
+    
+    // URL oluştur
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const audioUrl = `${baseUrl}/audio/${fileName}`;
+    console.log('✅ Controller: Audio URL oluşturuldu:', audioUrl);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -123,11 +170,32 @@ const textToSpeech = async (req, res) => {
       });
     }
 
-    // Ses dosyasını base64 olarak döndür
+    // Ses dosyasını kaydet ve URL döndür (base64 yerine, çok daha hızlı)
+    // Public klasörü yoksa oluştur
+    const publicDir = path.join(__dirname, '..', 'public', 'audio');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    
+    // Eski dosyaları temizle (async olarak, beklemeden devam et)
+    setImmediate(() => cleanupOldAudioFiles(publicDir));
+    
+    // Unique dosya adı oluştur
+    const fileName = `tts_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`;
+    const filePath = path.join(publicDir, fileName);
+    
+    // Audio buffer'ı dosyaya kaydet
+    fs.writeFileSync(filePath, result.audioBuffer);
+    console.log('✅ TTS Controller: Audio dosyası kaydedildi:', fileName);
+    
+    // URL oluştur
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const audioUrl = `${baseUrl}/audio/${fileName}`;
+    
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
-        audioUrl: `data:audio/mp3;base64,${result.audioBuffer.toString('base64')}`
+        audioUrl: audioUrl
       }
     });
 

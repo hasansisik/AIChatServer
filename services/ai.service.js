@@ -100,14 +100,14 @@ class AIService {
         messages: [
           {
             role: 'system',
-            content: 'Sen yardımcı bir AI asistanısın. Çok kısa, net ve Türkçe cevaplar ver. Maksimum 20 kelime kullan. Tek cümle ile cevap ver. Kısa ve öz ol.'
+            content: 'You are a helpful AI assistant. Provide concise, clear answers in English. Use short sentences. Be brief and to the point. Maximum 2-3 sentences per response.'
           },
           {
             role: 'user',
             content: text
           }
         ],
-        max_tokens: 40, // Çok daha kısa yanıtlar için (TTS hızlandırmak için)
+        max_tokens: 60, // Kısa ve öz yanıtlar için
         temperature: 0.5, // Daha deterministik
         presence_penalty: 0,
         frequency_penalty: 0,

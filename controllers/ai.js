@@ -52,9 +52,13 @@ const processVoiceMessage = async (req, res) => {
     const audioBuffer = req.file.buffer;
     console.log('🎯 Controller: Audio buffer alındı, boyut:', audioBuffer.length, 'bytes');
 
+    // Voice bilgisini al (body'den veya query'den)
+    const voice = req.body.voice || req.query.voice || 'alloy';
+    console.log('🎯 Controller: Voice seçildi:', voice);
+
     // AI servisini çağır
     console.log('🎯 Controller: AI servisine gönderiliyor...');
-    const result = await aiService.processVoiceToVoice(audioBuffer);
+    const result = await aiService.processVoiceToVoice(audioBuffer, voice);
     console.log('🎯 Controller: AI servis yanıtı:', result);
 
     if (!result.success) {
@@ -112,7 +116,7 @@ const processVoiceMessage = async (req, res) => {
 // Sadece metin gönder ve AI yanıtı al
 const sendTextMessage = async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, voice } = req.body;
 
     if (!message || message.trim().length === 0) {
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -121,7 +125,7 @@ const sendTextMessage = async (req, res) => {
       });
     }
 
-    // AI servisini çağır
+    // AI servisini çağır (voice bilgisi text mesajında TTS için kullanılmaz, sadece response döner)
     const result = await aiService.getAIResponse(message);
 
     if (!result.success) {
@@ -151,7 +155,7 @@ const sendTextMessage = async (req, res) => {
 // Metni sese çevir
 const textToSpeech = async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, voice } = req.body;
 
     if (!text || text.trim().length === 0) {
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -160,8 +164,12 @@ const textToSpeech = async (req, res) => {
       });
     }
 
+    // Voice bilgisini al (varsayılan: alloy)
+    const selectedVoice = voice || 'alloy';
+    console.log('🎯 TTS Controller: Voice seçildi:', selectedVoice);
+
     // TTS servisini çağır
-    const result = await aiService.textToSpeech(text);
+    const result = await aiService.textToSpeech(text, selectedVoice);
 
     if (!result.success) {
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

@@ -155,14 +155,19 @@ class AIService {
   }
 
   // Text to Speech - OpenAI TTS API (En ucuz model)
-  async textToSpeech(text) {
+  async textToSpeech(text, voice = 'alloy') {
     try {
       console.log('🔊 TTS: Metin alındı:', text);
+      console.log('🔊 TTS: Voice seçildi:', voice);
       console.log('🔊 TTS: OpenAI TTS API\'ye gönderiliyor...');
+      
+      // Geçerli voice'ları kontrol et
+      const validVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+      const selectedVoice = validVoices.includes(voice) ? voice : 'alloy';
       
       const mp3 = await this.openai.audio.speech.create({
         model: 'tts-1', // En ucuz TTS modeli
-        voice: 'alloy', // En ucuz ses
+        voice: selectedVoice, // Karaktere özel ses
         input: text,
         response_format: 'mp3',
         speed: 1.3 // %30 daha hızlı konuşma (TTS süresini daha da kısaltır)
@@ -194,10 +199,11 @@ class AIService {
   }
 
   // Tam işlem akışı: Ses -> Metin -> AI -> Ses (Paralel işleme ile optimize edildi)
-  async processVoiceToVoice(audioBuffer) {
+  async processVoiceToVoice(audioBuffer, voice = 'alloy') {
     try {
       console.log('🚀 Voice to Voice process started...');
       console.log('🚀 Audio buffer boyutu:', audioBuffer.length, 'bytes');
+      console.log('🚀 Voice seçildi:', voice);
       
       // 1. Ses -> Metin
       console.log('📝 Step 1: Converting speech to text...');
@@ -240,7 +246,7 @@ class AIService {
       // 3. AI Yanıtı -> Ses (Hemen başlat - paralel işleme)
       console.log('🔊 Step 3: Converting text to speech (parallel)...');
       // TTS'i hemen başlat (await etmeden devam edebiliriz ama await ediyoruz)
-      const ttsResult = await this.textToSpeech(aiResult.response);
+      const ttsResult = await this.textToSpeech(aiResult.response, voice);
       console.log('🔊 TTS Result:', ttsResult);
       
       if (!ttsResult.success) {

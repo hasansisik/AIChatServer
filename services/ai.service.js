@@ -100,7 +100,7 @@ class AIService {
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful AI assistant. Provide concise, clear answers in English. Use short sentences. Be brief and to the point. Maximum 2-3 sentences per response.'
+            content: 'You are a helpful AI assistant. You MUST ONLY respond in English. NEVER respond in Turkish or any other language. Always answer in English regardless of the language of the question. Provide concise, clear answers in English. Use short sentences. Be brief and to the point. Maximum 2-3 sentences per response.'
           },
           {
             role: 'user',

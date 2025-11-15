@@ -18,15 +18,12 @@ class S2SWebSocketService {
     });
 
     this.wss.on('connection', (ws, req) => {
-      console.log('🔌 S2S WebSocket bağlantısı kuruldu');
-      
       // Conversation ID'yi URL'den al (örn: /ws/s2s?conversation_id=xxx)
       const url = new URL(req.url, `http://${req.headers.host}`);
       const conversationId = url.searchParams.get('conversation_id');
       const voice = url.searchParams.get('voice') || 'alloy';
 
       if (!conversationId) {
-        console.error('❌ Conversation ID bulunamadı');
         ws.close(1008, 'Conversation ID required');
         return;
       }
@@ -40,19 +37,18 @@ class S2SWebSocketService {
         sttChunks: [], // STT chunk'larını biriktir
         isRecording: false, // Konuşma kaydediliyor mu?
         silenceStartTime: null, // Sessizlik ne zaman başladı?
-        silenceThreshold: 2000 // 2 saniye sessizlik = konuşma bitti
+        silenceThreshold: 1500 // 1.5 saniye sessizlik = konuşma bitti (hızlandırıldı)
       });
 
-      console.log(`✅ S2S Client kaydedildi: ${clientId} (voice: ${voice})`);
+      console.log('Socket bağlı');
 
       // Mesaj alma
       ws.on('message', async (data) => {
         try {
-          const client = this.clients.get(clientId);
-          if (!client) {
-            console.error('❌ Client bulunamadı:', clientId);
-            return;
-          }
+            const client = this.clients.get(clientId);
+            if (!client) {
+              return;
+            }
 
           // Binary data = audio chunk
           if (Buffer.isBuffer(data) || data instanceof ArrayBuffer) {
@@ -62,23 +58,20 @@ class S2SWebSocketService {
           else if (typeof data === 'string') {
             await this.handleControlMessage(client, JSON.parse(data));
           }
-        } catch (error) {
-          console.error('❌ S2S WebSocket mesaj hatası:', error);
-          this.sendError(ws, error.message);
-        }
+          } catch (error) {
+            this.sendError(ws, error.message);
+          }
       });
 
-      // Bağlantı kapanınca temizle
-      ws.on('close', () => {
-        console.log(`🔌 S2S WebSocket bağlantısı kapandı: ${clientId}`);
-        this.clients.delete(clientId);
-      });
+        // Bağlantı kapanınca temizle
+        ws.on('close', () => {
+          this.clients.delete(clientId);
+        });
 
-      // Hata durumu
-      ws.on('error', (error) => {
-        console.error(`❌ S2S WebSocket hatası (${clientId}):`, error);
-        this.clients.delete(clientId);
-      });
+        // Hata durumu
+        ws.on('error', (error) => {
+          this.clients.delete(clientId);
+        });
 
       // Bağlantı kuruldu mesajı gönder
       this.sendMessage(ws, {
@@ -86,9 +79,7 @@ class S2SWebSocketService {
         conversationId,
         voice
       });
-    });
-
-    console.log('✅ S2S WebSocket server başlatıldı: /ws/s2s');
+      });
   }
 
   // Audio chunk işle
@@ -115,13 +106,10 @@ class S2SWebSocketService {
         if (client.isRecording) {
           if (!client.silenceStartTime) {
             client.silenceStartTime = Date.now();
-            console.log(`🔇 Sessizlik başladı (${client.conversationId})`);
           } else {
             // Sessizlik devam ediyor - kontrol et
             const silenceDuration = Date.now() - client.silenceStartTime;
             if (silenceDuration >= client.silenceThreshold) {
-              // 2 saniye sessizlik - konuşma bitti (birleştirilmiş chunk'lar ile)
-              console.log(`✅ Sessizlik süresi doldu (${silenceDuration}ms), konuşma tamamlandı`);
               await this.handleSpeechComplete(client);
             }
           }
@@ -150,14 +138,11 @@ class S2SWebSocketService {
       
       if (bytesPerSecond < minBytesPerSecond) {
         // Dosya boyutu düşük - gürültü olabilir
-        console.log(`🔇 VAD: Dosya boyutu düşük (${bytesPerSecond.toFixed(0)} bytes/s < ${minBytesPerSecond} bytes/s), gürültü olabilir`);
         if (client.isRecording && !client.silenceStartTime) {
           client.silenceStartTime = Date.now();
         }
         return;
       }
-      
-      console.log(`✅ VAD: Konuşma algılandı (${bytesPerSecond.toFixed(0)} bytes/s)`);
       
       // Filtrelenmiş metni kullan
       const finalText = filteredText;
@@ -166,7 +151,7 @@ class S2SWebSocketService {
       if (!client.isRecording) {
         client.isRecording = true;
         client.silenceStartTime = null;
-        console.log(`🎤 Konuşma başladı (${client.conversationId}): "${finalText}"`);
+        console.log('Kayıt ediliyor');
         
         // Frontend'e konuşma başladı mesajı gönder
         this.sendMessage(client.ws, {
@@ -179,7 +164,10 @@ class S2SWebSocketService {
 
       // STT chunk'ını ekle
       client.sttChunks.push(finalText);
-      console.log(`📝 STT Chunk eklendi (${client.conversationId}): "${finalText}" (Toplam: ${client.sttChunks.length})`);
+      
+      // Tüm chunk'ları birleştir ve STT metnini göster
+      const combinedText = client.sttChunks.join(' ').trim();
+      console.log(`STT: ${combinedText}`);
 
       // Frontend'e STT chunk gönder (streaming)
       this.sendMessage(client.ws, {
@@ -187,17 +175,13 @@ class S2SWebSocketService {
         text: finalText,
         chunkIndex: client.sttChunks.length - 1
       });
-
-      // Tüm chunk'ları birleştir
-      const combinedText = client.sttChunks.join(' ').trim();
       
       // Cümle tamamlanmış mı kontrol et (noktalama işareti var mı?)
       const punctuationMarks = ['.', '!', '?', ';'];
       const hasPunctuation = punctuationMarks.some(mark => combinedText.trim().endsWith(mark));
       
       // Eğer cümle tamamlanmışsa ve anlamlı bir metin varsa, hemen LLM+TTS yap
-      if (hasPunctuation && combinedText.trim().length > 5) { // Minimum 5 karakter (daha sıkı kontrol)
-        console.log(`✅ Cümle tamamlandı, hemen yanıt veriliyor: "${combinedText}"`);
+      if (hasPunctuation && combinedText.trim().length > 5) {
         // Birleştirilmiş metin ile yanıt ver
         await this.handleSingleChunkResponse(client, combinedText);
         // STT chunk'larını temizle (yeni cümle için)
@@ -207,7 +191,6 @@ class S2SWebSocketService {
       }
       // Cümle tamamlanmamışsa - sessizlik timer'ı zaten sıfırlandı, bir sonraki chunk'ı bekle
     } catch (error) {
-      console.error('❌ Audio chunk işleme hatası:', error);
       this.sendError(client.ws, error.message);
     }
   }
@@ -225,16 +208,14 @@ class S2SWebSocketService {
         client.isRecording = false;
         client.silenceStartTime = null;
         break;
-      default:
-        console.log('⚠️ Bilinmeyen control mesajı:', message.type);
-    }
+        default:
+          break;
+      }
   }
 
   // Tek bir chunk için hemen yanıt ver (streaming S2S)
   async handleSingleChunkResponse(client, text) {
     try {
-      console.log(`🚀 [Streaming S2S] Hemen yanıt veriliyor: "${text}"`);
-
       // Frontend'e konuşma tamamlandı mesajı gönder
       this.sendMessage(client.ws, {
         type: 'speech_complete',
@@ -273,9 +254,9 @@ class S2SWebSocketService {
                 mimeType: 'audio/mpeg'
               });
             }
-          }).catch((error) => {
-            console.error('❌ TTS chunk hatası:', error);
-          });
+            }).catch((error) => {
+              // Sessizce geç
+            });
         }
       });
 
@@ -294,16 +275,14 @@ class S2SWebSocketService {
         totalChunks: ttsChunks.length
       });
 
-    } catch (error) {
-      console.error('❌ Single chunk response hatası:', error);
-      this.sendError(client.ws, error.message);
-    }
+      } catch (error) {
+        this.sendError(client.ws, error.message);
+      }
   }
 
   // Konuşma tamamlandı - LLM + TTS yap (tüm chunk'ları birleştir)
   async handleSpeechComplete(client) {
     if (client.sttChunks.length === 0) {
-      console.log(`⚠️ Konuşma tamamlandı ama STT chunk yok (${client.conversationId})`);
       client.isRecording = false;
       client.silenceStartTime = null;
       return;
@@ -311,7 +290,6 @@ class S2SWebSocketService {
 
     // STT chunk'larını birleştir
     const fullText = client.sttChunks.join(' ').trim();
-    console.log(`✅ Konuşma tamamlandı (${client.conversationId}): "${fullText}"`);
 
     // STT chunk'larını temizle
     client.sttChunks = [];
@@ -357,9 +335,9 @@ class S2SWebSocketService {
                 mimeType: 'audio/mpeg'
               });
             }
-          }).catch((error) => {
-            console.error('❌ TTS chunk hatası:', error);
-          });
+            }).catch((error) => {
+              // Sessizce geç
+            });
         }
       });
 
@@ -378,10 +356,9 @@ class S2SWebSocketService {
         totalChunks: ttsChunks.length
       });
 
-    } catch (error) {
-      console.error('❌ LLM+TTS hatası:', error);
-      this.sendError(client.ws, error.message);
-    }
+      } catch (error) {
+        this.sendError(client.ws, error.message);
+      }
   }
 
   // Mesaj gönder
@@ -439,7 +416,6 @@ class S2SWebSocketService {
       'thank you for watching.'
     ];
     if (commonPhrases.includes(lowerText)) {
-      console.log(`🔇 Yaygın ifade filtrelendi: "${trimmed}"`);
       return null;
     }
 

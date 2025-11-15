@@ -42,7 +42,7 @@ class AIService {
       const text = transcription.text || '';
       
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(`⏱️ STT: ${duration}s`);
+      console.log(`STT süresi: ${duration}s`);
 
       return {
         success: true,
@@ -50,7 +50,7 @@ class AIService {
       };
     } catch (error) {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.error(`❌ STT Error (${duration}s):`, error.message);
+      console.error(`STT Error (${duration}s):`, error.message);
       return {
         success: false,
         error: error.message
@@ -114,8 +114,7 @@ class AIService {
 
       const endTime = Date.now();
       const duration = ((endTime - startTime) / 1000).toFixed(2);
-      const firstTokenDuration = firstTokenTime ? ((firstTokenTime - startTime) / 1000).toFixed(2) : 'N/A';
-      console.log(`⏱️ AI: ${duration}s (ilk token: ${firstTokenDuration}s)`);
+      console.log(`LLM süresi: ${duration}s`);
 
       return {
         success: true,
@@ -123,7 +122,7 @@ class AIService {
       };
     } catch (error) {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.error(`❌ AI Error (${duration}s):`, error.message);
+      console.error(`LLM Error (${duration}s):`, error.message);
       return {
         success: false,
         error: error.message
@@ -149,7 +148,7 @@ class AIService {
       const buffer = Buffer.from(await mp3.arrayBuffer());
       
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(`⏱️ TTS: ${duration}s`);
+      console.log(`TTS süresi: ${duration}s`);
       
       return {
         success: true,
@@ -157,7 +156,7 @@ class AIService {
       };
     } catch (error) {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.error(`❌ TTS Error (${duration}s):`, error.message);
+      console.error(`TTS Error (${duration}s):`, error.message);
       return {
         success: false,
         error: error.message
@@ -192,7 +191,6 @@ class AIService {
       // Sadece noktalama işaretleri veya tekrarlayan karakterler varsa filtrele
       const meaningfulText = trimmedText.replace(/[.,!?;:\s]/g, '').trim();
       if (meaningfulText.length < 3) {
-        console.log('⚠️ STT sonucu anlamsız, işlem atlanıyor:', trimmedText);
         return {
           success: false,
           error: 'Ses algılanamadı veya anlamsız'
@@ -218,7 +216,6 @@ class AIService {
               ttsChunks[currentIndex] = ttsResult.audioBuffer;
             }
           }).catch((error) => {
-            console.error('❌ TTS chunk hatası:', error);
           });
         }
       });
@@ -254,7 +251,6 @@ class AIService {
       }
 
       const totalDuration = ((Date.now() - totalStartTime) / 1000).toFixed(2);
-      console.log(`⏱️ Toplam: ${totalDuration}s (${validChunks.length} chunk)`);
       
       return {
         success: true,
@@ -264,7 +260,6 @@ class AIService {
       };
     } catch (error) {
       const totalDuration = ((Date.now() - totalStartTime) / 1000).toFixed(2);
-      console.error(`❌ Process Error (${totalDuration}s):`, error.message);
       return {
         success: false,
         error: 'İşlem sırasında hata oluştu: ' + error.message

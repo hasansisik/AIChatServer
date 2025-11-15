@@ -72,12 +72,22 @@ app.use('/v1/ai', aiRouter);
 app.use(notFoundMiddleware);
 app.use(erorHandlerMiddleware);
 
+const http = require('http');
+const s2sWebSocketService = require('./services/s2sWebSocket.service');
+
 const port = process.env.PORT || 5001
 
 const start = async () => {
     try {
         await connectDB(process.env.MONGO_URL)
-        app.listen(port,
+        
+        // HTTP server oluştur (WebSocket için gerekli)
+        const server = http.createServer(app);
+        
+        // S2S WebSocket server'ı başlat
+        s2sWebSocketService.initialize(server);
+        
+        server.listen(port,
             console.log(`MongoDb Connection Successful,App started on port ${port} : ${process.env.NODE_ENV}`),
         );
     } catch (error) {

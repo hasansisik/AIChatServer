@@ -30,69 +30,43 @@ const cleanupOldAudioFiles = (publicDir) => {
 
 // Ses kaydını işle ve AI yanıtı al
 const processVoiceMessage = async (req, res) => {
+  const startTime = Date.now();
   try {
-    console.log('🎯 Controller: Voice message işlemi başladı');
-    console.log('🎯 Controller: Request headers:', req.headers);
-    console.log('🎯 Controller: Request file:', req.file ? {
-      fieldname: req.file.fieldname,
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    } : 'No file');
-
     if (!req.file) {
-      console.log('❌ Controller: Ses dosyası bulunamadı');
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: 'Ses dosyası bulunamadı'
       });
     }
 
-    // Ses dosyasını buffer'a çevir
     const audioBuffer = req.file.buffer;
-    console.log('🎯 Controller: Audio buffer alındı, boyut:', audioBuffer.length, 'bytes');
-
-    // Voice bilgisini al (body'den veya query'den)
     const voice = req.body.voice || req.query.voice || 'alloy';
-    console.log('🎯 Controller: Voice seçildi:', voice);
-
-    // AI servisini çağır
-    console.log('🎯 Controller: AI servisine gönderiliyor...');
     const result = await aiService.processVoiceToVoice(audioBuffer, voice);
-    console.log('🎯 Controller: AI servis yanıtı:', result);
 
     if (!result.success) {
-      console.log('❌ Controller: AI servis başarısız');
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: result.error
       });
     }
 
-    // Başarılı yanıt - Audio dosyasını kaydet ve URL döndür
-    console.log('✅ Controller: Başarılı yanıt hazırlanıyor');
-    
     // Public klasörü yoksa oluştur
     const publicDir = path.join(__dirname, '..', 'public', 'audio');
     if (!fs.existsSync(publicDir)) {
       fs.mkdirSync(publicDir, { recursive: true });
     }
     
-    // Eski dosyaları temizle (async olarak, beklemeden devam et)
     setImmediate(() => cleanupOldAudioFiles(publicDir));
     
-    // Unique dosya adı oluştur
     const fileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`;
     const filePath = path.join(publicDir, fileName);
-    
-    // Audio buffer'ı dosyaya kaydet (sync - hızlı)
     fs.writeFileSync(filePath, result.audioBuffer);
-    console.log('✅ Controller: Audio dosyası kaydedildi:', fileName);
     
-    // URL oluştur
     const baseUrl = req.protocol + '://' + req.get('host');
     const audioUrl = `${baseUrl}/audio/${fileName}`;
-    console.log('✅ Controller: Audio URL oluşturuldu:', audioUrl);
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`⏱️ Voice API: ${duration}s`);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -115,6 +89,7 @@ const processVoiceMessage = async (req, res) => {
 
 // Sadece metin gönder ve AI yanıtı al
 const sendTextMessage = async (req, res) => {
+  const startTime = Date.now();
   try {
     const { message, voice } = req.body;
 
@@ -124,8 +99,8 @@ const sendTextMessage = async (req, res) => {
         message: 'Mesaj boş olamaz'
       });
     }
-
-    // AI servisini çağır (voice bilgisi text mesajında TTS için kullanılmaz, sadece response döner)
+    
+    const selectedVoice = voice || 'alloy';
     const result = await aiService.getAIResponse(message);
 
     if (!result.success) {
@@ -134,12 +109,41 @@ const sendTextMessage = async (req, res) => {
         message: result.error
       });
     }
+    
+    const ttsResult = await aiService.textToSpeech(result.response, selectedVoice);
 
-    // Başarılı yanıt
+    if (!ttsResult.success) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        data: {
+          aiResponse: result.response
+        }
+      });
+    }
+
+    const publicDir = path.join(__dirname, '..', 'public', 'audio');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    
+    setImmediate(() => cleanupOldAudioFiles(publicDir));
+    
+    const fileName = `tts_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`;
+    const filePath = path.join(publicDir, fileName);
+    fs.writeFileSync(filePath, ttsResult.audioBuffer);
+    
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const audioUrl = `${baseUrl}/audio/${fileName}`;
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`⏱️ Text API: ${duration}s`);
+
+    // Başarılı yanıt - audioUrl ile birlikte
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
-        aiResponse: result.response
+        aiResponse: result.response,
+        audioUrl: audioUrl
       }
     });
 

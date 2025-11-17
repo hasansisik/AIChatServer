@@ -1,4 +1,5 @@
 const { SpeechClient } = require('@google-cloud/speech');
+const OpenAI = require('openai');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const fs = require('fs');
@@ -8,6 +9,7 @@ class AIService {
   constructor() {
     ffmpeg.setFfmpegPath(ffmpegInstaller.path);
     this.speechClient = this.initializeSpeechClient();
+    this.openai = this.initializeOpenAI();
   }
 
   initializeSpeechClient() {
@@ -36,6 +38,21 @@ class AIService {
       return new SpeechClient(speechOptions);
     } catch (error) {
       console.error('❌ Google STT istemcisi oluşturulamadı:', error.message);
+      return null;
+    }
+  }
+
+  initializeOpenAI() {
+    try {
+      if (!process.env.OPENAI_API_KEY) {
+        console.warn('⚠️ OPENAI_API_KEY tanımlı değil. LLM/TTS devre dışı.');
+        return null;
+      }
+      return new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+    } catch (error) {
+      console.error('❌ OpenAI istemcisi oluşturulamadı:', error.message);
       return null;
     }
   }
@@ -157,6 +174,65 @@ class AIService {
         isClosed = true;
         recognizeStream.destroy();
       }
+    };
+  }
+
+  async generateAssistantReply(userText) {
+    if (!this.openai) {
+      throw new Error('OpenAI istemcisi hazır değil');
+    }
+
+    const systemPrompt = process.env.LLM_SYSTEM_PROMPT || 'Sen sıcak kanlı bir arkadaşsın, kısa ve samimi cevaplar ver.';
+
+    const llmStart = Date.now();
+    const completion = await this.openai.chat.completions.create({
+      model: process.env.LLM_MODEL || 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userText }
+      ],
+      max_tokens: Number(process.env.LLM_MAX_TOKENS || 80),
+      temperature: Number(process.env.LLM_TEMPERATURE || 0.6)
+    });
+    const llmDuration = Date.now() - llmStart;
+
+    const replyText = completion.choices?.[0]?.message?.content?.trim();
+    if (!replyText) {
+      throw new Error('LLM boş cevap döndürdü');
+    }
+    console.log(`🤖 LLM süresi: ${llmDuration}ms`);
+    return replyText;
+  }
+
+  async synthesizeSpeech(text, voice = 'alloy') {
+    if (!this.openai) {
+      throw new Error('OpenAI istemcisi hazır değil');
+    }
+
+    const ttsStart = Date.now();
+    const response = await this.openai.audio.speech.create({
+      model: process.env.TTS_MODEL || 'gpt-4o-mini-tts',
+      voice: voice || 'alloy',
+      input: text,
+      format: 'mp3',
+      speed: Number(process.env.TTS_SPEED || 1.2)
+    });
+
+    const arrayBuffer = await response.arrayBuffer();
+    const duration = Date.now() - ttsStart;
+    console.log(`🔊 TTS süresi: ${duration}ms`);
+    return Buffer.from(arrayBuffer);
+  }
+
+  async generateAssistantReplyWithTTS(userText, voice = 'alloy') {
+    const totalStart = Date.now();
+    const replyText = await this.generateAssistantReply(userText);
+    const audioBuffer = await this.synthesizeSpeech(replyText, voice);
+    const totalDuration = Date.now() - totalStart;
+    console.log(`⚡ LLM+TTS toplam: ${totalDuration}ms`);
+    return {
+      replyText,
+      audioBuffer
     };
   }
 }

@@ -22,7 +22,10 @@ class SpeechWebSocketService {
         streamingSession: null,
         currentText: '',
         processingQueue: Promise.resolve(),
-        lastSentText: ''
+        lastSentText: '',
+        voice: 'alloy',
+        sttStart: null,
+        llmStart: null
       };
 
       this.clients.set(clientId, client);
@@ -76,6 +79,7 @@ class SpeechWebSocketService {
       }
 
       client.streamingSession = session;
+      client.sttStart = Date.now();
     }
 
     await client.streamingSession.writeChunk(audioBuffer);
@@ -113,11 +117,17 @@ class SpeechWebSocketService {
     }
 
     client.lastSentText = '';
-    console.log(`✅ [STT Final][${client.id}] ${text}`);
+    const sttDuration = client.sttStart ? `${Date.now() - client.sttStart}ms` : 'N/A';
+    console.log(`✅ [STT Final][${client.id}][voice:${client.voice}] ${text} (${sttDuration})`);
     this.sendMessage(client.ws, {
       type: 'transcription_complete',
       text
     });
+
+    client.llmStart = Date.now();
+    client.processingQueue = client.processingQueue.then(() =>
+      this.sendAssistantResponse(client, text)
+    );
   }
 
   async handleControlMessage(client, rawMessage) {
@@ -133,6 +143,12 @@ class SpeechWebSocketService {
       case 'speech_end':
         await client.processingQueue;
         await this.finalizeTranscription(client);
+        break;
+      case 'config':
+        if (typeof message.voice === 'string' && message.voice.trim().length > 0) {
+          client.voice = message.voice.trim();
+          console.log(`🎙️ [Config][${client.id}] Voice -> ${client.voice}`);
+        }
         break;
       case 'reset':
         client.currentText = '';
@@ -160,7 +176,8 @@ class SpeechWebSocketService {
     if (client.currentText) {
       const finalText = client.currentText;
       client.currentText = '';
-      console.log(`✅ [STT Final][${client.id}] ${finalText}`);
+      const sttDuration = client.sttStart ? `${Date.now() - client.sttStart}ms` : 'N/A';
+      console.log(`✅ [STT Final][${client.id}][voice:${client.voice}] ${finalText} (${sttDuration})`);
       this.sendMessage(client.ws, {
         type: 'transcription_complete',
         text: finalText
@@ -173,6 +190,35 @@ class SpeechWebSocketService {
     }
 
     client.lastSentText = '';
+    client.sttStart = null;
+  }
+
+  async sendAssistantResponse(client, userText) {
+    try {
+      const { replyText, audioBuffer } = await aiService.generateAssistantReplyWithTTS(
+        userText,
+        client.voice
+      );
+    const llmDuration = client.llmStart ? `${Date.now() - client.llmStart}ms` : 'N/A';
+    console.log(`🤖 [LLM+TTS][${client.id}][voice:${client.voice}] tamamlandı (${llmDuration})`);
+
+      this.sendMessage(client.ws, {
+        type: 'llm_response',
+        text: replyText
+      });
+
+      if (audioBuffer) {
+        this.sendMessage(client.ws, {
+          type: 'tts_audio',
+          audio: audioBuffer.toString('base64'),
+          mimeType: 'audio/mpeg'
+        });
+      }
+      client.llmStart = null;
+    } catch (error) {
+      console.error('Assistant response error:', error);
+      this.sendError(client.ws, 'Cevap oluşturulamadı');
+    }
   }
 
   sendMessage(ws, message) {

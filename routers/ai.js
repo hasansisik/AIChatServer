@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { processVoiceMessage, sendTextMessage, textToSpeech } = require('../controllers/ai');
+const { processVoiceMessage } = require('../controllers/ai');
 
 const router = express.Router();
 
@@ -20,13 +20,7 @@ const upload = multer({
   }
 });
 
-// POST /v1/ai/voice - Ses kaydını işle ve AI yanıtı al
+// POST /v1/ai/voice - Ses kaydını işle ve transkripsiyon al
 router.post('/voice', upload.single('audio'), processVoiceMessage);
-
-// POST /v1/ai/text - Metin gönder ve AI yanıtı al
-router.post('/text', sendTextMessage);
-
-// POST /v1/ai/tts - Metni sese çevir
-router.post('/tts', textToSpeech);
 
 module.exports = router;

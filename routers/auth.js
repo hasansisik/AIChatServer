@@ -1,5 +1,5 @@
 const express = require('express');
-const {register,googleRegister,googleAuth,login,googleLogin,getMyProfile,getAllUsers,logout,forgotPassword,resetPassword,verifyEmail,againEmail,editProfile,deleteAccount,deleteUser,updateUserRole,updateUserStatus,createAdminUser,updateUser,updateOnboardingData} = require('../controllers/auth');
+const {register,googleRegister,googleAuth,login,googleLogin,getMyProfile,getAllUsers,logout,forgotPassword,resetPassword,verifyEmail,againEmail,editProfile,deleteAccount,deleteUser,updateUserRole,updateUserStatus,createAdminUser,updateUser,updateOnboardingData,addFavoriteAI,removeFavoriteAI,getFavoriteAIs} = require('../controllers/auth');
 const {isAuthenticated, isAdmin} = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -17,6 +17,9 @@ router.post('/verify-email', verifyEmail);
 router.post('/again-email', againEmail);
 router.post('/edit-profile',isAuthenticated, editProfile);
 router.post('/update-onboarding',isAuthenticated, updateOnboardingData);
+router.post('/favorite-ai/add', isAuthenticated, addFavoriteAI);
+router.post('/favorite-ai/remove', isAuthenticated, removeFavoriteAI);
+router.get('/favorite-ai', isAuthenticated, getFavoriteAIs);
 router.delete('/delete-account',isAuthenticated, deleteAccount);
 
 // Admin only routes

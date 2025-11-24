@@ -190,7 +190,12 @@ const UserSchema = new mongoose.Schema(
     isOnboardingCompleted: { 
       type: Boolean, 
       default: false 
-    }
+    },
+    // Favori AI'lar
+    favoriteAIs: [{
+      type: String, // AI id'leri
+      trim: true
+    }]
   },
   { timestamps: true }
 );

@@ -1345,6 +1345,111 @@ const updateOnboardingData = async (req, res, next) => {
   }
 };
 
+// Add Favorite AI
+const addFavoriteAI = async (req, res) => {
+  try {
+    const { aiId } = req.body;
+
+    if (!aiId) {
+      return res.status(400).json({
+        message: "AI ID gereklidir.",
+      });
+    }
+
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "Kullanıcı bulunamadı.",
+      });
+    }
+
+    // Eğer zaten favorilerde varsa, ekleme
+    if (user.favoriteAIs && user.favoriteAIs.includes(aiId)) {
+      return res.status(200).json({
+        message: "AI zaten favorilerde.",
+        favoriteAIs: user.favoriteAIs,
+      });
+    }
+
+    // Favorilere ekle
+    if (!user.favoriteAIs) {
+      user.favoriteAIs = [];
+    }
+    user.favoriteAIs.push(aiId);
+    await user.save();
+
+    res.status(200).json({
+      message: "AI favorilere eklendi.",
+      favoriteAIs: user.favoriteAIs,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Favori eklenirken hata oluştu.",
+      error: error.message,
+    });
+  }
+};
+
+// Remove Favorite AI
+const removeFavoriteAI = async (req, res) => {
+  try {
+    const { aiId } = req.body;
+
+    if (!aiId) {
+      return res.status(400).json({
+        message: "AI ID gereklidir.",
+      });
+    }
+
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "Kullanıcı bulunamadı.",
+      });
+    }
+
+    // Favorilerden çıkar
+    if (user.favoriteAIs && user.favoriteAIs.includes(aiId)) {
+      user.favoriteAIs = user.favoriteAIs.filter(id => id !== aiId);
+      await user.save();
+    }
+
+    res.status(200).json({
+      message: "AI favorilerden çıkarıldı.",
+      favoriteAIs: user.favoriteAIs,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Favori çıkarılırken hata oluştu.",
+      error: error.message,
+    });
+  }
+};
+
+// Get Favorite AIs
+const getFavoriteAIs = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('favoriteAIs');
+
+    if (!user) {
+      return res.status(404).json({
+        message: "Kullanıcı bulunamadı.",
+      });
+    }
+
+    res.status(200).json({
+      favoriteAIs: user.favoriteAIs || [],
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Favoriler alınırken hata oluştu.",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   googleRegister,
@@ -1366,4 +1471,7 @@ module.exports = {
   createAdminUser,
   updateUser,
   updateOnboardingData,
+  addFavoriteAI,
+  removeFavoriteAI,
+  getFavoriteAIs,
 };

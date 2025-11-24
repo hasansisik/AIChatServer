@@ -10,6 +10,50 @@ class AIService {
     ffmpeg.setFfmpegPath(ffmpegInstaller.path);
     this.speechClient = this.initializeSpeechClient();
     this.openai = this.initializeOpenAI();
+    // Eski geçici dosyaları temizle (başlangıçta ve periyodik olarak)
+    this.cleanupTempFiles();
+    // Her 5 dakikada bir geçici dosyaları temizle
+    setInterval(() => this.cleanupTempFiles(), 5 * 60 * 1000);
+  }
+
+  cleanupTempFiles() {
+    try {
+      const tempDir = path.join(__dirname, '..', 'temp', 'stt');
+      if (!fs.existsSync(tempDir)) {
+        return;
+      }
+
+      const files = fs.readdirSync(tempDir);
+      const now = Date.now();
+      let cleanedCount = 0;
+
+      files.forEach((file) => {
+        const filePath = path.join(tempDir, file);
+        try {
+          const stats = fs.statSync(filePath);
+          // 5 dakikadan eski dosyaları sil
+          const fileAge = now - stats.mtimeMs;
+          if (fileAge > 5 * 60 * 1000) {
+            fs.unlinkSync(filePath);
+            cleanedCount++;
+          }
+        } catch (error) {
+          // Dosya silinemezse veya okunamazsa, yine de silmeyi dene
+          try {
+            fs.unlinkSync(filePath);
+            cleanedCount++;
+          } catch (e) {
+            console.warn(`⚠️ Geçici dosya silinemedi: ${filePath}`, e.message);
+          }
+        }
+      });
+
+      if (cleanedCount > 0) {
+        console.log(`🧹 ${cleanedCount} geçici STT dosyası temizlendi`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Geçici dosya temizleme hatası:', error.message);
+    }
   }
 
   initializeSpeechClient() {
@@ -59,14 +103,50 @@ class AIService {
 
   async convertAudioToLinear16(audioBuffer) {
     const tempDir = path.join(__dirname, '..', 'temp', 'stt');
-    const inputPath = path.join(tempDir, `input_${Date.now()}.m4a`);
-    const outputPath = path.join(tempDir, `output_${Date.now()}.raw`);
+    const timestamp = Date.now();
+    const inputPath = path.join(tempDir, `input_${timestamp}.m4a`);
+    const outputPath = path.join(tempDir, `output_${timestamp}.raw`);
 
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    fs.writeFileSync(inputPath, audioBuffer);
+    // Audio buffer'ın binary data olduğundan emin ol
+    if (!Buffer.isBuffer(audioBuffer)) {
+      throw new Error('Audio buffer must be a Buffer');
+    }
+
+    // Geçici dosyaları temizleme fonksiyonu
+    const cleanupFiles = () => {
+      try {
+        if (fs.existsSync(inputPath)) {
+          fs.unlinkSync(inputPath);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Input dosyası silinemedi: ${inputPath}`, error.message);
+      }
+      try {
+        if (fs.existsSync(outputPath)) {
+          fs.unlinkSync(outputPath);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Output dosyası silinemedi: ${outputPath}`, error.message);
+      }
+    };
+
+    // Timeout ekle - 30 saniye sonra dosyaları temizle
+    const cleanupTimeout = setTimeout(() => {
+      console.warn(`⚠️ Geçici dosyalar timeout nedeniyle temizleniyor: ${inputPath}`);
+      cleanupFiles();
+    }, 30000);
+
+    try {
+      fs.writeFileSync(inputPath, audioBuffer);
+    } catch (error) {
+      clearTimeout(cleanupTimeout);
+      cleanupFiles();
+      throw error;
+    }
 
     return new Promise((resolve, reject) => {
       ffmpeg(inputPath)
@@ -77,22 +157,19 @@ class AIService {
           '-ar 16000'
         ])
         .on('end', () => {
+          clearTimeout(cleanupTimeout);
           try {
             const convertedBuffer = fs.readFileSync(outputPath);
-            fs.unlinkSync(inputPath);
-            fs.unlinkSync(outputPath);
+            cleanupFiles();
             resolve({ buffer: convertedBuffer, sampleRate: 16000 });
           } catch (error) {
+            cleanupFiles();
             reject(error);
           }
         })
         .on('error', (error) => {
-          try {
-            if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-            if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-          } catch (cleanupError) {
-            console.error('Cleanup error:', cleanupError.message);
-          }
+          clearTimeout(cleanupTimeout);
+          cleanupFiles();
           reject(error);
         })
         .save(outputPath);

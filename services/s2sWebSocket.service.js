@@ -86,7 +86,14 @@ class SpeechWebSocketService {
     client.processingQueue = client.processingQueue
       .then(() => this.processChunk(client, buffer))
       .catch((error) => {
-        this.sendError(client.ws, error.message);
+        // STT timeout hatalarını hata mesajı olarak gönderme, sadece log'la
+        if (error.code === 11 || error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+          console.log(`⏸️ [STT Timeout][${client.id}] Chunk işlenirken timeout (pause veya timeout)`);
+          // Hata mesajı gönderme
+        } else {
+          console.error(`❌ [Chunk Error][${client.id}]:`, error.message);
+          this.sendError(client.ws, error.message);
+        }
       });
   }
 
@@ -105,13 +112,59 @@ class SpeechWebSocketService {
       client.sttStart = Date.now();
     }
 
-    await client.streamingSession.writeChunk(audioBuffer);
+    try {
+      await client.streamingSession.writeChunk(audioBuffer);
+    } catch (error) {
+      // STT timeout veya diğer hatalar - session'ı iptal et ve temizle
+      if (error.code === 11 || error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+        console.log(`⏸️ [STT Timeout][${client.id}] Session iptal ediliyor (pause veya timeout)`);
+        if (client.streamingSession) {
+          try {
+            client.streamingSession.cancel();
+          } catch (e) {
+            // Ignore cancel errors
+          }
+          client.streamingSession = null;
+        }
+        client.currentText = '';
+        client.lastSentText = '';
+        client.sttStart = null;
+        // Hata mesajı gönderme, sadece log'la
+      } else {
+        console.error(`❌ [STT Error][${client.id}]:`, error.message);
+        // Diğer hatalar için error gönder
+        this.sendError(client.ws, `STT hatası: ${error.message}`);
+      }
+    }
   }
 
   handleStreamingResult(client, result) {
     if (result?.error) {
+      // STT timeout hatası - hata mesajı gönderme, sadece log'la ve temizle
+      if (result.message?.includes('timeout') || result.message?.includes('Timeout') || result.code === 11) {
+        console.log(`⏸️ [STT Timeout][${client.id}] Session iptal ediliyor`);
+        if (client.streamingSession) {
+          try {
+            client.streamingSession.cancel();
+          } catch (e) {
+            // Ignore cancel errors
+          }
+          client.streamingSession = null;
+        }
+        client.currentText = '';
+        client.lastSentText = '';
+        client.sttStart = null;
+        // Hata mesajı gönderme, sadece log'la
+        return;
+      }
+      
+      // Diğer hatalar için error gönder
       if (client.streamingSession) {
-        client.streamingSession.cancel();
+        try {
+          client.streamingSession.cancel();
+        } catch (e) {
+          // Ignore cancel errors
+        }
         client.streamingSession = null;
       }
       client.currentText = '';
@@ -168,6 +221,21 @@ class SpeechWebSocketService {
       case 'speech_end':
         await client.processingQueue;
         await this.finalizeTranscription(client);
+        break;
+      case 'speech_pause':
+        // Pause durumu: STT session'ını iptal et, timeout'u önle
+        if (client.streamingSession) {
+          try {
+            client.streamingSession.cancel();
+            client.streamingSession = null;
+            console.log(`⏸️ [Pause][${client.id}] STT session iptal edildi`);
+          } catch (error) {
+            console.error(`❌ [Pause][${client.id}] STT session iptal hatası:`, error.message);
+          }
+        }
+        client.currentText = '';
+        client.lastSentText = '';
+        client.sttStart = null;
         break;
       case 'config':
         console.log(`🔧 [Config][${client.id}] Config mesajı alındı, voice:`, message.voice);

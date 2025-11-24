@@ -116,6 +116,16 @@ class AIService {
       throw new Error('Audio buffer must be a Buffer');
     }
 
+    // Buffer boyutunu kontrol et - çok küçükse veya boşsa hata fırlatma
+    if (audioBuffer.length === 0) {
+      throw new Error('Audio buffer is empty');
+    }
+
+    // Buffer'ın minimum boyutunu kontrol et (örneğin 100 byte'dan küçükse geçersiz olabilir)
+    if (audioBuffer.length < 100) {
+      throw new Error('Audio buffer is too small');
+    }
+
     // Geçici dosyaları temizleme fonksiyonu
     const cleanupFiles = () => {
       try {

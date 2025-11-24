@@ -204,15 +204,19 @@ class AIService {
     return replyText;
   }
 
-  async synthesizeSpeech(text, voice = 'alloy') {
+  async synthesizeSpeech(text, voice) {
     if (!this.openai) {
       throw new Error('OpenAI istemcisi hazır değil');
+    }
+
+    if (!voice || !voice.trim()) {
+      throw new Error('Voice parametresi gerekli');
     }
 
     const ttsStart = Date.now();
     const response = await this.openai.audio.speech.create({
       model: process.env.TTS_MODEL || 'gpt-4o-mini-tts',
-      voice: voice || 'alloy',
+      voice: voice.trim(),
       input: text,
       format: 'mp3',
       speed: Number(process.env.TTS_SPEED || 1.2)
@@ -224,7 +228,11 @@ class AIService {
     return Buffer.from(arrayBuffer);
   }
 
-  async generateAssistantReplyWithTTS(userText, voice = 'alloy') {
+  async generateAssistantReplyWithTTS(userText, voice) {
+    if (!voice || !voice.trim()) {
+      throw new Error('Voice parametresi gerekli');
+    }
+
     const totalStart = Date.now();
     const replyText = await this.generateAssistantReply(userText);
     const audioBuffer = await this.synthesizeSpeech(replyText, voice);

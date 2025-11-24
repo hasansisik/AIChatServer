@@ -14,8 +14,21 @@ class SpeechWebSocketService {
       perMessageDeflate: false
     });
 
-    this.wss.on('connection', (ws) => {
+    this.wss.on('connection', (ws, req) => {
       const clientId = `client_${Date.now()}`;
+      
+      // Query parametrelerinden voice bilgisini al
+      let voiceFromQuery = null;
+      try {
+        if (req.url && req.url.includes('?')) {
+          const queryString = req.url.split('?')[1];
+          const params = new URLSearchParams(queryString);
+          voiceFromQuery = params.get('voice');
+        }
+      } catch (error) {
+        console.error('❌ Query parameter parse hatası:', error.message);
+      }
+      
       const client = {
         ws,
         id: clientId,
@@ -23,22 +36,32 @@ class SpeechWebSocketService {
         currentText: '',
         processingQueue: Promise.resolve(),
         lastSentText: '',
-        voice: 'alloy',
+        voice: voiceFromQuery ? voiceFromQuery.trim() : null,
         sttStart: null,
         llmStart: null
       };
 
       this.clients.set(clientId, client);
-      console.log('Socket bağlı');
+      if (client.voice) {
+        console.log(`✅ Socket bağlı [${client.id}] Voice (query): ${client.voice}`);
+      } else {
+        console.log(`⚠️ Socket bağlı [${client.id}] Voice bilgisi yok (query parameter), URL: ${req.url}`);
+      }
 
       ws.on('message', async (data) => {
         try {
           if (typeof data === 'string') {
+            // String mesajları kontrol mesajı olarak işle
+            console.log(`📨 [Message][${client.id}] String mesaj alındı:`, data.substring(0, 200));
             await this.handleControlMessage(client, data);
           } else if (Buffer.isBuffer(data) || data instanceof ArrayBuffer) {
+            // Binary data ses chunk'ı
             this.enqueueChunk(client, data);
+          } else {
+            console.log(`⚠️ [Message][${client.id}] Bilinmeyen mesaj tipi:`, typeof data);
           }
         } catch (error) {
+          console.error(`❌ [Message][${client.id}] Mesaj işleme hatası:`, error.message);
           this.sendError(client.ws, error.message);
         }
       });
@@ -134,7 +157,9 @@ class SpeechWebSocketService {
     let message = null;
     try {
       message = JSON.parse(rawMessage);
+      console.log(`📋 [Control][${client.id}] Mesaj parse edildi:`, message.type, message);
     } catch (error) {
+      console.error(`❌ [Control][${client.id}] JSON parse hatası:`, error.message, 'Raw:', rawMessage.substring(0, 200));
       this.sendError(client.ws, 'Geçersiz kontrol mesajı');
       return;
     }
@@ -145,9 +170,12 @@ class SpeechWebSocketService {
         await this.finalizeTranscription(client);
         break;
       case 'config':
+        console.log(`🔧 [Config][${client.id}] Config mesajı alındı, voice:`, message.voice);
         if (typeof message.voice === 'string' && message.voice.trim().length > 0) {
           client.voice = message.voice.trim();
-          console.log(`🎙️ [Config][${client.id}] Voice -> ${client.voice}`);
+          console.log(`✅ [Config][${client.id}] Voice set edildi: ${client.voice}`);
+        } else {
+          console.warn(`⚠️ [Config][${client.id}] Geçersiz voice bilgisi:`, message.voice, typeof message.voice);
         }
         break;
       case 'reset':
@@ -195,6 +223,10 @@ class SpeechWebSocketService {
 
   async sendAssistantResponse(client, userText) {
     try {
+      if (!client.voice || !client.voice.trim()) {
+        throw new Error('Voice bilgisi yok, config mesajı bekleniyor');
+      }
+
       const { replyText, audioBuffer } = await aiService.generateAssistantReplyWithTTS(
         userText,
         client.voice

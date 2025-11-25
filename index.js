@@ -8,6 +8,8 @@ const app = express();
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
 
 //database
 const connectDB = require('./config/connectDB');
@@ -20,42 +22,16 @@ const couponRouter = require('./routers/coupon');
 const notFoundMiddleware = require('./middleware/not-found')
 const erorHandlerMiddleware = require('./middleware/eror-handler')
 
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'https://ai-chat-admin-zeta.vercel.app',
-    ];
-    
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true, // Allow cookies and authorization headers
-  optionsSuccessStatus: 200, // For legacy browser support
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
-  exposedHeaders: ['Set-Cookie']
-};
-
 //app
+const corsOptions = {
+  origin: true,
+  credentials: true,
+  exposedHeaders: ['Content-Type', 'Authorization'],
+};
 app.use(cors(corsOptions));
-
-// Security headers
-app.use((req, res, next) => {
-  res.header('X-Content-Type-Options', 'nosniff');
-  res.header('X-Frame-Options', 'DENY');
-  res.header('X-XSS-Protection', '1; mode=block');
-  res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  next();
-});
+app.options('*', cors(corsOptions));
+app.use(helmet());
+app.use(mongoSanitize());
 
 app.use(morgan('tiny'));
 app.use(express.json({ limit: '10mb' }));

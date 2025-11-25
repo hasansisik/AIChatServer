@@ -306,7 +306,7 @@ class AIService {
       voice: voice.trim(),
       input: text,
       format: 'mp3',
-      speed: Number(process.env.TTS_SPEED || 1.2)
+      speed: Number(process.env.TTS_SPEED || 0.9)
     });
 
     const arrayBuffer = await response.arrayBuffer();

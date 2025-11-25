@@ -269,7 +269,7 @@ class AIService {
       throw new Error('OpenAI istemcisi hazır değil');
     }
 
-    const systemPrompt = process.env.LLM_SYSTEM_PROMPT || 'Sen sıcak kanlı bir arkadaşsın, kısa ve samimi cevaplar ver.';
+    const systemPrompt = process.env.LLM_SYSTEM_PROMPT || 'You are a warm and friendly assistant. Give short and friendly answers. IMPORTANT: Always respond in English, regardless of what language the user speaks. Even if the user writes in Turkish or any other language, you must always respond in English.';
 
     const llmStart = Date.now();
     const completion = await this.openai.chat.completions.create({

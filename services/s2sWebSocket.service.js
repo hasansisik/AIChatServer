@@ -38,7 +38,9 @@ class SpeechWebSocketService {
         lastSentText: '',
         voice: voiceFromQuery ? voiceFromQuery.trim() : null,
         sttStart: null,
-        llmStart: null
+        llmStart: null,
+        pendingChunks: [],
+        chunkProcessingTimer: null
       };
 
       this.clients.set(clientId, client);
@@ -105,10 +107,22 @@ class SpeechWebSocketService {
       });
 
       ws.on('close', () => {
+        // Cleanup: pending chunk timer'ı iptal et
+        if (client.chunkProcessingTimer) {
+          clearTimeout(client.chunkProcessingTimer);
+          client.chunkProcessingTimer = null;
+        }
+        client.pendingChunks = [];
         this.clients.delete(clientId);
       });
 
       ws.on('error', () => {
+        // Cleanup: pending chunk timer'ı iptal et
+        if (client.chunkProcessingTimer) {
+          clearTimeout(client.chunkProcessingTimer);
+          client.chunkProcessingTimer = null;
+        }
+        client.pendingChunks = [];
         this.clients.delete(clientId);
       });
 
@@ -121,18 +135,51 @@ class SpeechWebSocketService {
 
   enqueueChunk(client, data) {
     const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-    client.processingQueue = client.processingQueue
-      .then(() => this.processChunk(client, buffer))
-      .catch((error) => {
-        // STT timeout hatalarını hata mesajı olarak gönderme, sadece log'la
-        if (error.code === 11 || error.message?.includes('timeout') || error.message?.includes('Timeout')) {
-          console.log(`⏸️ [STT Timeout][${client.id}] Chunk işlenirken timeout (pause veya timeout)`);
-          // Hata mesajı gönderme
-        } else {
-          console.error(`❌ [Chunk Error][${client.id}]:`, error.message);
-          this.sendError(client.ws, error.message);
+    
+    // Chunk processing'i optimize et - queue'da bekleyen chunk varsa birleştir
+    // Bu sayede FFmpeg çağrılarını azaltırız
+    if (!client.pendingChunks) {
+      client.pendingChunks = [];
+    }
+    
+    client.pendingChunks.push(buffer);
+    
+    // Eğer zaten bir chunk processing timer varsa, iptal et
+    if (client.chunkProcessingTimer) {
+      clearTimeout(client.chunkProcessingTimer);
+    }
+    
+    // Kısa bir delay ile chunk'ları topla ve birlikte işle
+    // Bu sayede birden fazla chunk gelirse tek seferde işleriz
+    client.chunkProcessingTimer = setTimeout(() => {
+      if (client.pendingChunks && client.pendingChunks.length > 0) {
+        const chunksToProcess = client.pendingChunks;
+        client.pendingChunks = [];
+        client.chunkProcessingTimer = null;
+        
+        // Eğer birden fazla chunk varsa, birleştir
+        const combinedBuffer = chunksToProcess.length > 1 
+          ? Buffer.concat(chunksToProcess)
+          : chunksToProcess[0];
+        
+        if (chunksToProcess.length > 1) {
+          console.log(`📦 [Batch][${client.id}] ${chunksToProcess.length} chunk birleştirildi (${combinedBuffer.length} bytes)`);
         }
-      });
+        
+        client.processingQueue = client.processingQueue
+          .then(() => this.processChunk(client, combinedBuffer))
+          .catch((error) => {
+            // STT timeout hatalarını hata mesajı olarak gönderme, sadece log'la
+            if (error.code === 11 || error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+              console.log(`⏸️ [STT Timeout][${client.id}] Chunk işlenirken timeout (pause veya timeout)`);
+              // Hata mesajı gönderme
+            } else {
+              console.error(`❌ [Chunk Error][${client.id}]:`, error.message);
+              this.sendError(client.ws, error.message);
+            }
+          });
+      }
+    }, 50); // 50ms delay - chunk'ları topla
   }
 
   async processChunk(client, audioBuffer) {

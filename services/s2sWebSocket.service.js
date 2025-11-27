@@ -107,22 +107,14 @@ class SpeechWebSocketService {
       });
 
       ws.on('close', () => {
-        // Cleanup: pending chunk timer'ı iptal et
-        if (client.chunkProcessingTimer) {
-          clearTimeout(client.chunkProcessingTimer);
-          client.chunkProcessingTimer = null;
-        }
-        client.pendingChunks = [];
+        console.log(`🔌 [Disconnect][${client.id}] Client bağlantısı kapandı`);
+        this.cleanupClient(client);
         this.clients.delete(clientId);
       });
 
-      ws.on('error', () => {
-        // Cleanup: pending chunk timer'ı iptal et
-        if (client.chunkProcessingTimer) {
-          clearTimeout(client.chunkProcessingTimer);
-          client.chunkProcessingTimer = null;
-        }
-        client.pendingChunks = [];
+      ws.on('error', (error) => {
+        console.error(`❌ [Error][${client.id}] WebSocket hatası:`, error.message);
+        this.cleanupClient(client);
         this.clients.delete(clientId);
       });
 
@@ -468,6 +460,38 @@ class SpeechWebSocketService {
       console.error(`❌ [LLM+TTS][${client.id}] Hata:`, error.message);
       this.sendError(client.ws, 'Cevap oluşturulamadı');
     }
+  }
+
+  cleanupClient(client) {
+    // 1. Chunk processing timer'ı iptal et
+    if (client.chunkProcessingTimer) {
+      clearTimeout(client.chunkProcessingTimer);
+      client.chunkProcessingTimer = null;
+    }
+    
+    // 2. Pending chunk'ları temizle
+    if (client.pendingChunks) {
+      client.pendingChunks = [];
+    }
+    
+    // 3. STT session'ı kapat (ÖNEMLİ!)
+    if (client.streamingSession) {
+      try {
+        console.log(`🧹 [Cleanup][${client.id}] STT session kapatılıyor...`);
+        client.streamingSession.cancel();
+        client.streamingSession = null;
+        console.log(`✅ [Cleanup][${client.id}] STT session kapatıldı`);
+      } catch (error) {
+        console.warn(`⚠️ [Cleanup][${client.id}] STT session kapatılamadı:`, error.message);
+        client.streamingSession = null;
+      }
+    }
+    
+    // 4. Client state'ini temizle
+    client.currentText = '';
+    client.lastSentText = '';
+    client.sttStart = null;
+    client.llmStart = null;
   }
 
   sendMessage(ws, message) {

@@ -1285,26 +1285,17 @@ const updateUser = async (req, res, next) => {
     if (status) user.status = status;
     if (req.body.courseCode !== undefined) user.courseCode = req.body.courseCode ? req.body.courseCode.toUpperCase().trim() : null;
 
-    // Handle demo extra time
+    // Handle demo extra time - update demoMinutesRemaining
     if (demoExtraMinutes && !isNaN(parseInt(demoExtraMinutes)) && parseInt(demoExtraMinutes) > 0) {
       const minutes = parseInt(demoExtraMinutes);
       
-      // Yeni sistem: demoTotalMinutes kullan
-      if (user.demoTotalMinutes && user.demoTotalMinutes > 0) {
-        // Mevcut demo varsa, süreyi artır
-        user.demoTotalMinutes = (user.demoTotalMinutes || 0) + minutes;
+      // If user already has demo minutes, add to it; otherwise set new
+      if (user.demoMinutesRemaining && user.demoMinutesRemaining > 0) {
+        // Extend existing demo
+        user.demoMinutesRemaining = user.demoMinutesRemaining + minutes;
       } else {
-        // Yeni demo başlat
-        user.demoTotalMinutes = minutes;
-        user.demoMinutesUsed = 0;
-      }
-      
-      // Eski sistem için de demoExpiresAt'ı güncelle (geriye dönük uyumluluk)
-      const now = new Date();
-      if (user.demoExpiresAt && user.demoExpiresAt > now) {
-        user.demoExpiresAt = new Date(user.demoExpiresAt.getTime() + (minutes * 60 * 1000));
-      } else {
-        user.demoExpiresAt = new Date(now.getTime() + (minutes * 60 * 1000));
+        // Start new demo
+        user.demoMinutesRemaining = minutes;
       }
     }
 

@@ -1288,14 +1288,22 @@ const updateUser = async (req, res, next) => {
     // Handle demo extra time
     if (demoExtraMinutes && !isNaN(parseInt(demoExtraMinutes)) && parseInt(demoExtraMinutes) > 0) {
       const minutes = parseInt(demoExtraMinutes);
-      const now = new Date();
       
-      // If user already has demo expiration, extend it; otherwise create new
+      // Yeni sistem: demoTotalMinutes kullan
+      if (user.demoTotalMinutes && user.demoTotalMinutes > 0) {
+        // Mevcut demo varsa, süreyi artır
+        user.demoTotalMinutes = (user.demoTotalMinutes || 0) + minutes;
+      } else {
+        // Yeni demo başlat
+        user.demoTotalMinutes = minutes;
+        user.demoMinutesUsed = 0;
+      }
+      
+      // Eski sistem için de demoExpiresAt'ı güncelle (geriye dönük uyumluluk)
+      const now = new Date();
       if (user.demoExpiresAt && user.demoExpiresAt > now) {
-        // Extend existing demo
         user.demoExpiresAt = new Date(user.demoExpiresAt.getTime() + (minutes * 60 * 1000));
       } else {
-        // Start new demo
         user.demoExpiresAt = new Date(now.getTime() + (minutes * 60 * 1000));
       }
     }

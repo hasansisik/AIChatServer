@@ -116,10 +116,20 @@ const UserSchema = new mongoose.Schema(
       uppercase: true,
       default: null
     },
-    // Demo expiration date (for demo coupons)
+    // Demo expiration date (for demo coupons) - DEPRECATED, use demoTotalMinutes instead
     demoExpiresAt: {
       type: Date,
       default: null
+    },
+    // Demo total minutes (for demo coupons) - total available minutes
+    demoTotalMinutes: {
+      type: Number,
+      default: null
+    },
+    // Demo minutes used - only increments when user is in AIDetailVideoView
+    demoMinutesUsed: {
+      type: Number,
+      default: 0
     },
     status: {
       type: String,

@@ -410,15 +410,22 @@ const validateCoupon = async (req, res, next) => {
 
     // Handle demo coupon
     if (coupon.isDemo) {
-      // Check if user already has an active demo
+      // Yeni sistem: demoTotalMinutes kullan (sadece AIDetailVideoView içinde geçen süre sayılacak)
+      if (user.demoTotalMinutes && user.demoTotalMinutes > 0) {
+        // Mevcut demo varsa, süreyi artır
+        user.demoTotalMinutes = (user.demoTotalMinutes || 0) + coupon.duration;
+      } else {
+        // Yeni demo başlat
+        user.demoTotalMinutes = coupon.duration;
+        user.demoMinutesUsed = 0;
+      }
+      
+      // Eski sistem için de demoExpiresAt'ı güncelle (geriye dönük uyumluluk)
       const now = new Date();
       if (user.demoExpiresAt && user.demoExpiresAt > now) {
-        // Extend existing demo
         const currentExpiry = user.demoExpiresAt;
-        const newExpiry = new Date(currentExpiry.getTime() + (coupon.duration * 60 * 1000));
-        user.demoExpiresAt = newExpiry;
+        user.demoExpiresAt = new Date(currentExpiry.getTime() + (coupon.duration * 60 * 1000));
       } else {
-        // Start new demo
         user.demoExpiresAt = new Date(now.getTime() + (coupon.duration * 60 * 1000));
       }
 
@@ -443,7 +450,8 @@ const validateCoupon = async (req, res, next) => {
           isDemo: true,
           code: coupon.code,
           duration: coupon.duration,
-          expiresAt: user.demoExpiresAt
+          demoTotalMinutes: user.demoTotalMinutes,
+          demoMinutesUsed: user.demoMinutesUsed
         }
       });
     }
@@ -465,17 +473,24 @@ const checkDemoStatus = async (req, res, next) => {
       });
     }
 
-    const user = await User.findById(req.user.userId).select('demoExpiresAt activeCouponCode');
+    const user = await User.findById(req.user.userId).select('demoExpiresAt demoTotalMinutes demoMinutesUsed activeCouponCode');
     if (!user) {
       return res.status(StatusCodes.OK).json({
         success: true,
         hasDemo: false,
+        demoTotalMinutes: null,
+        demoMinutesUsed: 0,
         expiresAt: null
       });
     }
 
+    // Yeni sistem: demoTotalMinutes ve demoMinutesUsed kullan
+    const remainingMinutes = user.demoTotalMinutes ? (user.demoTotalMinutes - (user.demoMinutesUsed || 0)) : 0;
+    const hasActiveDemo = remainingMinutes > 0;
+    
+    // Eski sistem kontrolü (geriye dönük uyumluluk)
     const now = new Date();
-    const hasActiveDemo = user.demoExpiresAt && user.demoExpiresAt > now;
+    const hasActiveDemoOld = user.demoExpiresAt && user.demoExpiresAt > now;
     
     // Check if purchase coupon is still valid
     let hasActivePurchase = false;
@@ -493,15 +508,59 @@ const checkDemoStatus = async (req, res, next) => {
       }
     }
 
-    // expiresAt'ı ISO string olarak döndür (null ise null döndür)
+    // expiresAt'ı ISO string olarak döndür (null ise null döndür) - geriye dönük uyumluluk için
     const expiresAtISO = user.demoExpiresAt ? user.demoExpiresAt.toISOString() : null;
     
     return res.status(StatusCodes.OK).json({
       success: true,
-      hasDemo: hasActiveDemo,
+      hasDemo: hasActiveDemo || hasActiveDemoOld, // Her iki sistem de kontrol ediliyor
       hasPurchase: hasActivePurchase,
-      expiresAt: expiresAtISO,
+      demoTotalMinutes: user.demoTotalMinutes || null,
+      demoMinutesUsed: user.demoMinutesUsed || 0,
+      remainingMinutes: remainingMinutes,
+      expiresAt: expiresAtISO, // Geriye dönük uyumluluk için
       activeCouponCode: user.activeCouponCode
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update Demo Usage Time (when user is in AIDetailVideoView)
+const updateDemoUsage = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized"
+      });
+    }
+
+    const { minutesUsed } = req.body; // Kullanılan dakika (saniye cinsinden değil, dakika cinsinden)
+
+    if (!minutesUsed || isNaN(parseFloat(minutesUsed)) || parseFloat(minutesUsed) < 0) {
+      throw new CustomError.BadRequestError("Geçerli bir kullanım süresi gönderilmelidir");
+    }
+
+    const user = await User.findById(req.user.userId).select('demoTotalMinutes demoMinutesUsed');
+    if (!user) {
+      throw new CustomError.NotFoundError("Kullanıcı bulunamadı");
+    }
+
+    // Kullanılan süreyi güncelle (sadece artır, azaltma yok)
+    const newMinutesUsed = parseFloat(minutesUsed);
+    if (newMinutesUsed > (user.demoMinutesUsed || 0)) {
+      user.demoMinutesUsed = newMinutesUsed;
+      await user.save();
+    }
+
+    const remainingMinutes = user.demoTotalMinutes ? (user.demoTotalMinutes - user.demoMinutesUsed) : 0;
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      demoTotalMinutes: user.demoTotalMinutes,
+      demoMinutesUsed: user.demoMinutesUsed,
+      remainingMinutes: remainingMinutes
     });
   } catch (error) {
     next(error);
@@ -514,5 +573,6 @@ module.exports = {
   updateCoupon,
   deleteCoupon,
   validateCoupon,
-  checkDemoStatus
+  checkDemoStatus,
+  updateDemoUsage
 };

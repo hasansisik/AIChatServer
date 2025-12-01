@@ -514,4 +514,5 @@ class SpeechWebSocketService {
   }
 }
 
-module.exports = new SpeechWebSocketService();
+const s2sWebSocketService = new SpeechWebSocketService();
+module.exports = s2sWebSocketService;

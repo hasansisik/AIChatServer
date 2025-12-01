@@ -17,13 +17,18 @@ class SpeechWebSocketService {
     this.wss.on('connection', (ws, req) => {
       const clientId = `client_${Date.now()}`;
       
-      // Query parametrelerinden voice bilgisini al
+      // Query parametrelerinden voice ve language bilgisini al
       let voiceFromQuery = null;
+      let languageFromQuery = 'tr'; // Default: Türkçe
       try {
         if (req.url && req.url.includes('?')) {
           const queryString = req.url.split('?')[1];
           const params = new URLSearchParams(queryString);
           voiceFromQuery = params.get('voice');
+          const lang = params.get('language');
+          if (lang && (lang === 'tr' || lang === 'en')) {
+            languageFromQuery = lang;
+          }
         }
       } catch (error) {
         console.error('❌ Query parameter parse hatası:', error.message);
@@ -37,6 +42,7 @@ class SpeechWebSocketService {
         processingQueue: Promise.resolve(),
         lastSentText: '',
         voice: voiceFromQuery ? voiceFromQuery.trim() : null,
+        language: languageFromQuery,
         sttStart: null,
         llmStart: null,
         pendingChunks: [],
@@ -45,9 +51,9 @@ class SpeechWebSocketService {
 
       this.clients.set(clientId, client);
       if (client.voice) {
-        console.log(`✅ Socket bağlı [${client.id}] Voice (query): ${client.voice}`);
+        console.log(`✅ Socket bağlı [${client.id}] Voice: ${client.voice}, Language: ${client.language}`);
       } else {
-        console.log(`⚠️ Socket bağlı [${client.id}] Voice bilgisi yok (query parameter), URL: ${req.url}`);
+        console.log(`⚠️ Socket bağlı [${client.id}] Voice bilgisi yok (query parameter), Language: ${client.language}, URL: ${req.url}`);
       }
 
       ws.on('message', async (data) => {
@@ -184,7 +190,7 @@ class SpeechWebSocketService {
     if (!client.streamingSession) {
       const session = aiService.createStreamingSession((result) => {
         this.handleStreamingResult(client, result);
-      });
+      }, client.language || 'tr');
 
       if (!session) {
         console.warn(`⚠️ [Chunk][${client.id}] STT oturumu başlatılamadı`);

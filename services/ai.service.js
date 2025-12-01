@@ -186,18 +186,21 @@ class AIService {
     });
   }
 
-  createStreamingSession(onResult) {
+  createStreamingSession(onResult, language = 'tr') {
     if (!this.speechClient) {
       return null;
     }
 
+    // Language code mapping: 'tr' -> 'tr-TR', 'en' -> 'en-US'
+    const languageCode = language === 'en' ? 'en-US' : 'tr-TR';
+    const alternativeLanguageCodes = language === 'en' 
+      ? ['tr-TR'] 
+      : ['en-US'];
+
     const request = {
       config: {
-        languageCode: process.env.GOOGLE_STT_LANGUAGE || 'tr-TR',
-        alternativeLanguageCodes: (process.env.GOOGLE_STT_ALT_LANGUAGES || 'en-US')
-          .split(',')
-          .map((code) => code.trim())
-          .filter(Boolean),
+        languageCode: languageCode,
+        alternativeLanguageCodes: alternativeLanguageCodes,
         enableAutomaticPunctuation: true,
         model: process.env.GOOGLE_STT_MODEL || 'latest_long',
         encoding: 'LINEAR16',

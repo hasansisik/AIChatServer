@@ -493,11 +493,14 @@ const checkDemoStatus = async (req, res, next) => {
       }
     }
 
+    // expiresAt'ı ISO string olarak döndür (null ise null döndür)
+    const expiresAtISO = user.demoExpiresAt ? user.demoExpiresAt.toISOString() : null;
+    
     return res.status(StatusCodes.OK).json({
       success: true,
       hasDemo: hasActiveDemo,
       hasPurchase: hasActivePurchase,
-      expiresAt: user.demoExpiresAt,
+      expiresAt: expiresAtISO,
       activeCouponCode: user.activeCouponCode
     });
   } catch (error) {

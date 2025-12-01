@@ -1254,7 +1254,7 @@ const createAdminUser = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, surname, email, role, status } = req.body;
+    const { name, surname, email, role, status, demoExtraMinutes } = req.body;
 
     // Validate required fields
     if (!name || !surname || !email) {
@@ -1284,6 +1284,21 @@ const updateUser = async (req, res, next) => {
     if (role) user.role = role;
     if (status) user.status = status;
     if (req.body.courseCode !== undefined) user.courseCode = req.body.courseCode ? req.body.courseCode.toUpperCase().trim() : null;
+
+    // Handle demo extra time
+    if (demoExtraMinutes && !isNaN(parseInt(demoExtraMinutes)) && parseInt(demoExtraMinutes) > 0) {
+      const minutes = parseInt(demoExtraMinutes);
+      const now = new Date();
+      
+      // If user already has demo expiration, extend it; otherwise create new
+      if (user.demoExpiresAt && user.demoExpiresAt > now) {
+        // Extend existing demo
+        user.demoExpiresAt = new Date(user.demoExpiresAt.getTime() + (minutes * 60 * 1000));
+      } else {
+        // Start new demo
+        user.demoExpiresAt = new Date(now.getTime() + (minutes * 60 * 1000));
+      }
+    }
 
     await user.save();
 

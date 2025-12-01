@@ -3,15 +3,19 @@ const {
   createOnboarding,
   getAllOnboardings,
   getActiveOnboardings,
+  markOnboardingAsViewed,
   updateOnboarding,
   deleteOnboarding
 } = require('../controllers/onboarding');
-const { isAuthenticated, isAdmin } = require('../middleware/authMiddleware');
+const { isAuthenticated, isAdmin, isOptionalAuthenticated } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// Public route - Get active onboardings (for app)
-router.get('/active', getActiveOnboardings);
+// Public route - Get active onboardings (for app, user-specific if authenticated)
+router.get('/active', isOptionalAuthenticated, getActiveOnboardings);
+
+// Authenticated user route - Mark onboarding as viewed
+router.post('/mark-viewed', isAuthenticated, markOnboardingAsViewed);
 
 // Admin only routes
 router.post('/', isAuthenticated, isAdmin, createOnboarding);

@@ -195,6 +195,11 @@ const UserSchema = new mongoose.Schema(
     favoriteAIs: [{
       type: String, // AI id'leri
       trim: true
+    }],
+    // Görülen onboarding'ler (onboarding ID'leri)
+    viewedOnboardings: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Onboarding'
     }]
   },
   { timestamps: true }

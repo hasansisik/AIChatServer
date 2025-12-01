@@ -1,4 +1,6 @@
+const mongoose = require("mongoose");
 const Onboarding = require("../models/Onboarding");
+const { User } = require("../models/User");
 const { StatusCodes } = require("http-status-codes");
 const CustomError = require("../errors");
 
@@ -111,20 +113,42 @@ const getAllOnboardings = async (req, res, next) => {
   }
 };
 
-// Get Active Onboardings (Public - for app)
+// Get Active Onboardings (Public - for app, but user-specific if authenticated)
 const getActiveOnboardings = async (req, res, next) => {
   try {
-    const onboardings = await Onboarding.find({ status: 'active' })
+    // Get all active onboardings
+    const allOnboardings = await Onboarding.find({ status: 'active' })
       .sort({ createdAt: -1 })
-      .select('mediaItems');
+      .select('_id mediaItems');
 
-    // Flatten mediaItems from all onboardings into a single array
+    // If user is authenticated, filter out viewed onboardings
+    let unviewedOnboardings = allOnboardings;
+    if (req.user && req.user.userId) {
+      const user = await User.findById(req.user.userId).select('viewedOnboardings');
+      if (user && user.viewedOnboardings && user.viewedOnboardings.length > 0) {
+        // Convert all viewed IDs to strings for comparison
+        const viewedIds = user.viewedOnboardings.map(id => {
+          const idStr = id ? id.toString() : null;
+          return idStr;
+        }).filter(id => id !== null);
+        
+        // Filter out viewed onboardings
+        unviewedOnboardings = allOnboardings.filter(onboarding => {
+          const onboardingIdStr = onboarding._id ? onboarding._id.toString() : null;
+          return onboardingIdStr && !viewedIds.includes(onboardingIdStr);
+        });
+      }
+    }
+
+    // Flatten mediaItems from unviewed onboardings into a single array
+    // But keep track of which onboarding each item belongs to
     const allMediaItems = [];
-    onboardings.forEach(onboarding => {
+    unviewedOnboardings.forEach(onboarding => {
       if (onboarding.mediaItems && onboarding.mediaItems.length > 0) {
         onboarding.mediaItems.forEach(item => {
           allMediaItems.push({
             _id: item._id || `${onboarding._id}-${item.order}`,
+            onboardingId: onboarding._id, // Keep reference to parent onboarding
             mediaUrl: item.mediaUrl,
             mediaType: item.mediaType,
             order: item.order
@@ -139,6 +163,59 @@ const getActiveOnboardings = async (req, res, next) => {
     res.status(StatusCodes.OK).json({
       success: true,
       onboardings: allMediaItems
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Mark Onboarding as Viewed (Authenticated users only)
+const markOnboardingAsViewed = async (req, res, next) => {
+  try {
+    const { onboardingId } = req.body;
+
+    if (!onboardingId) {
+      throw new CustomError.BadRequestError("Onboarding ID gereklidir");
+    }
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.userId) {
+      throw new CustomError.UnauthenticatedError("Bu işlem için giriş yapmanız gerekmektedir");
+    }
+
+    // Check if onboarding exists
+    const onboarding = await Onboarding.findById(onboardingId);
+    if (!onboarding) {
+      throw new CustomError.NotFoundError("Onboarding bulunamadı");
+    }
+
+    // Get user and check if already viewed
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      throw new CustomError.NotFoundError("Kullanıcı bulunamadı");
+    }
+
+    // Add to viewedOnboardings if not already there
+    const onboardingIdStr = onboardingId.toString();
+    const onboardingObjectId = new mongoose.Types.ObjectId(onboardingId);
+    
+    // Check if already viewed using ObjectId comparison
+    const alreadyViewed = user.viewedOnboardings && user.viewedOnboardings.some(viewedId => {
+      if (!viewedId) return false;
+      return viewedId.toString() === onboardingIdStr || viewedId.equals(onboardingObjectId);
+    });
+    
+    if (!alreadyViewed) {
+      if (!user.viewedOnboardings) {
+        user.viewedOnboardings = [];
+      }
+      user.viewedOnboardings.push(onboardingObjectId);
+      await user.save();
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Onboarding görüldü olarak işaretlendi"
     });
   } catch (error) {
     next(error);
@@ -229,6 +306,7 @@ module.exports = {
   createOnboarding,
   getAllOnboardings,
   getActiveOnboardings,
+  markOnboardingAsViewed,
   updateOnboarding,
   deleteOnboarding
 };

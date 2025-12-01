@@ -121,15 +121,31 @@ const createCoupon = async (req, res, next) => {
       throw saveError;
     }
 
-    // If userIds provided, update users' courseCode
+    // If userIds provided, update users
     if (userIds && Array.isArray(userIds) && userIds.length > 0) {
       try {
-        await User.updateMany(
-          { _id: { $in: userIds } },
-          { $set: { courseCode: couponCode.toUpperCase() } }
-        );
+        if (isDemo && duration) {
+          // Demo kuponu: Kullanıcılara demoMinutesRemaining ekle
+          const users = await User.find({ _id: { $in: userIds } });
+          for (const user of users) {
+            if (user.demoMinutesRemaining && user.demoMinutesRemaining > 0) {
+              // Mevcut süreye ekle
+              user.demoMinutesRemaining = user.demoMinutesRemaining + duration;
+            } else {
+              // Yeni demo başlat
+              user.demoMinutesRemaining = duration;
+            }
+            await user.save();
+          }
+        } else {
+          // Purchase kuponu: Kullanıcılara courseCode ekle
+          await User.updateMany(
+            { _id: { $in: userIds } },
+            { $set: { courseCode: couponCode.toUpperCase() } }
+          );
+        }
       } catch (userUpdateError) {
-        console.error("Error updating users' courseCode:", userUpdateError);
+        console.error("Error updating users:", userUpdateError);
         // Don't fail the coupon creation if user update fails
       }
     }
@@ -281,15 +297,31 @@ const updateCoupon = async (req, res, next) => {
 
     await coupon.save();
 
-    // If userIds provided, update users' courseCode
+    // If userIds provided, update users
     if (userIds && Array.isArray(userIds) && userIds.length > 0) {
       try {
-        await User.updateMany(
-          { _id: { $in: userIds } },
-          { $set: { courseCode: finalCode } }
-        );
+        if (coupon.isDemo && coupon.duration) {
+          // Demo kuponu: Kullanıcılara demoMinutesRemaining ekle
+          const users = await User.find({ _id: { $in: userIds } });
+          for (const user of users) {
+            if (user.demoMinutesRemaining && user.demoMinutesRemaining > 0) {
+              // Mevcut süreye ekle
+              user.demoMinutesRemaining = user.demoMinutesRemaining + coupon.duration;
+            } else {
+              // Yeni demo başlat
+              user.demoMinutesRemaining = coupon.duration;
+            }
+            await user.save();
+          }
+        } else {
+          // Purchase kuponu: Kullanıcılara courseCode ekle
+          await User.updateMany(
+            { _id: { $in: userIds } },
+            { $set: { courseCode: finalCode } }
+          );
+        }
       } catch (userUpdateError) {
-        console.error("Error updating users' courseCode:", userUpdateError);
+        console.error("Error updating users:", userUpdateError);
         // Don't fail the coupon update if user update fails
       }
     }
@@ -418,6 +450,10 @@ const validateCoupon = async (req, res, next) => {
         // Start new demo
         user.demoMinutesRemaining = coupon.duration;
       }
+
+      // Demo kuponu için de courseCode set et (hem demo hem kurs kodu olarak kullanılabilir)
+      user.activeCouponCode = coupon.code;
+      user.courseCode = coupon.code; // Kurs kodu olarak da kaydet
 
       // Add to used coupons
       if (!user.usedCoupons) {

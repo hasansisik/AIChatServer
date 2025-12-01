@@ -4,15 +4,22 @@ const { StatusCodes } = require("http-status-codes");
 const CustomError = require("../errors");
 
 // Generate unique coupon code
-const generateCouponCode = () => {
-  // 4 prefix seçeneği: KMY, KMS, KMP, KM
-  const prefixes = ['KMY', 'KMS', 'KMP', 'KM'];
-  const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+const generateCouponCode = (isDemo = false) => {
+  // Demo coupons: KMD prefix
+  // Purchase coupons: KME prefix (default)
+  // Legacy coupons: KMY, KMS, KMP, KM
+  let prefix;
+  if (isDemo) {
+    prefix = 'KMD';
+  } else {
+    // Default to KME for purchase
+    prefix = 'KME';
+  }
   
   // 5 haneli random sayı oluştur
   const randomNumber = Math.floor(10000 + Math.random() * 90000); // 10000-99999 arası
   
-  return `${randomPrefix}${randomNumber}`;
+  return `${prefix}${randomNumber}`;
 };
 
 
@@ -21,39 +28,98 @@ const createCoupon = async (req, res, next) => {
   try {
     const {
       code,
+      isDemo = false,
+      duration,
       validUntil,
       usageLimit,
       userIds
     } = req.body;
 
+    // Validate duration for demo coupons
+    if (isDemo && (!duration || duration <= 0)) {
+      throw new CustomError.BadRequestError("Demo kuponları için süre (dakika) gereklidir");
+    }
+
     // Generate code if not provided
     let couponCode = code;
     if (!couponCode) {
-      couponCode = generateCouponCode();
+      // Generate unique code with retry mechanism
+      let attempts = 0;
+      const maxAttempts = 10;
+      let isUnique = false;
+      
+      while (!isUnique && attempts < maxAttempts) {
+        couponCode = generateCouponCode(isDemo);
+        // Normalize code (uppercase and trim) - model does this automatically but we need to check
+        const normalizedCode = couponCode.toUpperCase().trim();
+        const existingCoupon = await Coupon.findOne({ code: normalizedCode });
+        if (!existingCoupon) {
+          isUnique = true;
+          couponCode = normalizedCode; // Use normalized version
+        } else {
+          attempts++;
+          console.log(`⚠️ Duplicate code found: ${normalizedCode}, retrying... (attempt ${attempts}/${maxAttempts})`);
+        }
+      }
+      
+      if (!isUnique) {
+        throw new CustomError.BadRequestError("Benzersiz kupon kodu oluşturulamadı. Lütfen tekrar deneyin.");
+      }
+    } else {
+      couponCode = couponCode.toUpperCase().trim();
     }
 
-    // Ensure code starts with KM, KMY, KMS, or KMP
-    const validPrefixes = ['KM', 'KMY', 'KMS', 'KMP'];
-    const codePrefix = couponCode.toUpperCase().substring(0, couponCode.length >= 3 ? 3 : 2);
-    if (!validPrefixes.some(prefix => couponCode.toUpperCase().startsWith(prefix))) {
-      throw new CustomError.BadRequestError("Kupon kodu KM, KMY, KMS veya KMP ile başlamalıdır");
+    // Validate code prefix based on isDemo
+    const validPrefixes = isDemo ? ['KMD'] : ['KME', 'KM', 'KMY', 'KMS', 'KMP'];
+    const codePrefix = couponCode.substring(0, couponCode.length >= 3 ? 3 : 2);
+    if (!validPrefixes.some(prefix => couponCode.startsWith(prefix))) {
+      const expectedPrefix = isDemo ? 'KMD' : 'KME';
+      throw new CustomError.BadRequestError(`${isDemo ? 'Demo' : 'Satın alma'} kuponu ${expectedPrefix} ile başlamalıdır`);
     }
 
-    // Check if code already exists
-    const existingCoupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
+    // Final check if code already exists (for manually entered codes or race conditions)
+    // Model has uppercase: true, so we check with normalized code
+    const existingCoupon = await Coupon.findOne({ code: couponCode });
     if (existingCoupon) {
-      throw new CustomError.BadRequestError("Bu kupon kodu zaten kullanılıyor");
+      console.log(`⚠️ Final duplicate check found existing coupon: ${couponCode} (DB: ${existingCoupon.code}, ID: ${existingCoupon._id})`);
+      throw new CustomError.BadRequestError("Bu kupon kodu zaten kullanılıyor. Lütfen farklı bir kod deneyin.");
     }
+    
+    console.log(`✅ Code ${couponCode} is unique, proceeding with creation...`);
 
     // Create coupon
+    // Generate unique uid for legacy index compatibility
+    const uid = `coupon_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
     const coupon = new Coupon({
-      code: couponCode.toUpperCase(),
+      code: couponCode,
+      isDemo: isDemo,
+      duration: isDemo ? duration : null,
       validUntil: validUntil ? new Date(validUntil) : null,
       usageLimit: usageLimit || null,
-      createdBy: req.user.userId
+      createdBy: req.user.userId,
+      uid: uid // Unique identifier for legacy index
     });
 
-    await coupon.save();
+    try {
+      await coupon.save();
+    } catch (saveError) {
+      // Handle MongoDB duplicate key error (E11000 is duplicate key error code)
+      if (saveError.code === 11000 || (saveError.name === 'MongoServerError' && saveError.message?.includes('duplicate'))) {
+        console.error(`❌ MongoDB duplicate key error for code: ${couponCode}`, saveError.message);
+        // Double check if coupon really exists
+        const doubleCheck = await Coupon.findOne({ code: couponCode });
+        if (doubleCheck) {
+          throw new CustomError.BadRequestError("Bu kupon kodu zaten kullanılıyor. Lütfen farklı bir kod deneyin.");
+        } else {
+          // This shouldn't happen, but if it does, it's a race condition
+          throw new CustomError.BadRequestError("Kupon oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+        }
+      }
+      // Log other errors for debugging
+      console.error('❌ Coupon save error:', saveError);
+      throw saveError;
+    }
 
     // If userIds provided, update users' courseCode
     if (userIds && Array.isArray(userIds) && userIds.length > 0) {
@@ -74,6 +140,8 @@ const createCoupon = async (req, res, next) => {
       coupon: {
         _id: coupon._id,
         code: coupon.code,
+        isDemo: coupon.isDemo,
+        duration: coupon.duration,
         validUntil: coupon.validUntil,
         usageLimit: coupon.usageLimit,
         usedCount: coupon.usedCount,
@@ -181,12 +249,17 @@ const updateCoupon = async (req, res, next) => {
       throw new CustomError.NotFoundError("Kupon bulunamadı");
     }
 
+    // Get isDemo from body or use existing
+    const couponIsDemo = req.body.isDemo !== undefined ? req.body.isDemo : coupon.isDemo;
+
     // Check if code is being changed and if it already exists
     if (code && code !== coupon.code) {
-      // Ensure code starts with KM, KMY, KMS, or KMP
-      const validPrefixes = ['KM', 'KMY', 'KMS', 'KMP'];
-      if (!validPrefixes.some(prefix => code.toUpperCase().startsWith(prefix))) {
-        throw new CustomError.BadRequestError("Kupon kodu KM, KMY, KMS veya KMP ile başlamalıdır");
+      const codeUpper = code.toUpperCase();
+      // Validate code prefix based on isDemo
+      const validPrefixes = couponIsDemo ? ['KMD'] : ['KME', 'KM', 'KMY', 'KMS', 'KMP'];
+      if (!validPrefixes.some(prefix => codeUpper.startsWith(prefix))) {
+        const expectedPrefix = couponIsDemo ? 'KMD' : 'KME';
+        throw new CustomError.BadRequestError(`${couponType === 'demo' ? 'Demo' : 'Satın alma'} kuponu ${expectedPrefix} ile başlamalıdır`);
       }
       
       const existingCoupon = await Coupon.findOne({ code: code.toUpperCase(), _id: { $ne: id } });
@@ -198,6 +271,10 @@ const updateCoupon = async (req, res, next) => {
     // Update coupon fields
     const finalCode = code ? code.toUpperCase() : coupon.code;
     if (code) coupon.code = finalCode;
+    if (req.body.isDemo !== undefined) coupon.isDemo = req.body.isDemo;
+    if (req.body.duration !== undefined) {
+      coupon.duration = coupon.isDemo ? req.body.duration : null;
+    }
     if (validUntil !== undefined) coupon.validUntil = validUntil ? new Date(validUntil) : null;
     if (usageLimit !== undefined) coupon.usageLimit = usageLimit;
     if (status) coupon.status = status;
@@ -223,6 +300,8 @@ const updateCoupon = async (req, res, next) => {
       coupon: {
         _id: coupon._id,
         code: coupon.code,
+        isDemo: coupon.isDemo,
+        duration: coupon.duration,
         validUntil: coupon.validUntil,
         usageLimit: coupon.usageLimit,
         usedCount: coupon.usedCount,
@@ -259,9 +338,178 @@ const deleteCoupon = async (req, res, next) => {
 };
 
 
+// Validate and Apply Coupon (Public - for app)
+const validateCoupon = async (req, res, next) => {
+  try {
+    const { code } = req.body;
+
+    if (!code) {
+      throw new CustomError.BadRequestError("Kupon kodu gereklidir");
+    }
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.userId) {
+      throw new CustomError.UnauthenticatedError("Bu işlem için giriş yapmanız gerekmektedir");
+    }
+
+    // Find coupon
+    const coupon = await Coupon.findOne({ code: code.toUpperCase().trim() });
+    if (!coupon) {
+      throw new CustomError.NotFoundError("Kupon bulunamadı");
+    }
+
+    // Check if coupon is valid
+    if (!coupon.isValid()) {
+      throw new CustomError.BadRequestError("Kupon geçersiz veya süresi dolmuş");
+    }
+
+    // Get user
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      throw new CustomError.NotFoundError("Kullanıcı bulunamadı");
+    }
+
+    // Check if user already used this coupon
+    const alreadyUsed = user.usedCoupons && user.usedCoupons.some(
+      usedCoupon => usedCoupon.coupon.toString() === coupon._id.toString()
+    );
+
+    if (alreadyUsed) {
+      throw new CustomError.BadRequestError("Bu kuponu daha önce kullandınız");
+    }
+
+    // Handle purchase coupon
+    if (!coupon.isDemo) {
+      // Set active coupon code
+      user.activeCouponCode = coupon.code;
+      user.courseCode = coupon.code; // Also set courseCode for compatibility
+      
+      // Add to used coupons
+      if (!user.usedCoupons) {
+        user.usedCoupons = [];
+      }
+      user.usedCoupons.push({
+        coupon: coupon._id,
+        usedAt: new Date()
+      });
+
+      await user.save();
+      
+      // Increment coupon usage
+      await coupon.incrementUsage();
+
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: "Kupon başarıyla aktif edildi",
+        coupon: {
+          isDemo: false,
+          code: coupon.code
+        }
+      });
+    }
+
+    // Handle demo coupon
+    if (coupon.isDemo) {
+      // Check if user already has an active demo
+      const now = new Date();
+      if (user.demoExpiresAt && user.demoExpiresAt > now) {
+        // Extend existing demo
+        const currentExpiry = user.demoExpiresAt;
+        const newExpiry = new Date(currentExpiry.getTime() + (coupon.duration * 60 * 1000));
+        user.demoExpiresAt = newExpiry;
+      } else {
+        // Start new demo
+        user.demoExpiresAt = new Date(now.getTime() + (coupon.duration * 60 * 1000));
+      }
+
+      // Add to used coupons
+      if (!user.usedCoupons) {
+        user.usedCoupons = [];
+      }
+      user.usedCoupons.push({
+        coupon: coupon._id,
+        usedAt: new Date()
+      });
+
+      await user.save();
+      
+      // Increment coupon usage
+      await coupon.incrementUsage();
+
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: `Demo erişim ${coupon.duration} dakika için aktif edildi`,
+        coupon: {
+          isDemo: true,
+          code: coupon.code,
+          duration: coupon.duration,
+          expiresAt: user.demoExpiresAt
+        }
+      });
+    }
+
+    throw new CustomError.BadRequestError("Geçersiz kupon tipi");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Check Demo Status (Authenticated users)
+const checkDemoStatus = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.userId) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        hasDemo: false,
+        expiresAt: null
+      });
+    }
+
+    const user = await User.findById(req.user.userId).select('demoExpiresAt activeCouponCode');
+    if (!user) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        hasDemo: false,
+        expiresAt: null
+      });
+    }
+
+    const now = new Date();
+    const hasActiveDemo = user.demoExpiresAt && user.demoExpiresAt > now;
+    
+    // Check if purchase coupon is still valid
+    let hasActivePurchase = false;
+    if (user.activeCouponCode) {
+      // Find the coupon and check if it's still valid
+      const coupon = await Coupon.findOne({ code: user.activeCouponCode });
+      if (coupon && coupon.isValid()) {
+        // Coupon exists and is valid (active status, not expired, not over usage limit)
+        hasActivePurchase = true;
+      } else {
+        // Coupon is invalid (deleted, expired, or inactive) - clear user's activeCouponCode
+        user.activeCouponCode = null;
+        user.courseCode = null;
+        await user.save();
+      }
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      hasDemo: hasActiveDemo,
+      hasPurchase: hasActivePurchase,
+      expiresAt: user.demoExpiresAt,
+      activeCouponCode: user.activeCouponCode
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createCoupon,
   getAllCoupons,
   updateCoupon,
-  deleteCoupon
+  deleteCoupon,
+  validateCoupon,
+  checkDemoStatus
 };

@@ -109,6 +109,18 @@ const UserSchema = new mongoose.Schema(
       uppercase: true,
       default: null
     },
+    // Active coupon code (for purchase activation)
+    activeCouponCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: null
+    },
+    // Demo expiration date (for demo coupons)
+    demoExpiresAt: {
+      type: Date,
+      default: null
+    },
     status: {
       type: String,
       enum: {

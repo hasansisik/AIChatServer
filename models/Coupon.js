@@ -8,6 +8,14 @@ const couponSchema = new mongoose.Schema({
     uppercase: true,
     trim: true
   },
+  isDemo: {
+    type: Boolean,
+    default: false
+  },
+  duration: {
+    type: Number, // Duration in minutes for demo coupons (null = infinite for purchase)
+    default: null
+  },
   validUntil: {
     type: Date,
     default: null // null means infinite validity
@@ -28,6 +36,13 @@ const couponSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    required: true
+  },
+  // Legacy field for compatibility with old unique index
+  // Each coupon gets a unique uid to satisfy the existing MongoDB index
+  uid: {
+    type: String,
+    unique: true,
     required: true
   }
 }, {
@@ -58,6 +73,11 @@ couponSchema.methods.isValid = function() {
   if (this.isExpired) return false;
   if (this.isUsageLimitReached) return false;
   return true;
+};
+
+// Method to check if coupon is demo type
+couponSchema.methods.isDemoType = function() {
+  return this.isDemo === true;
 };
 
 // Method to increment usage count

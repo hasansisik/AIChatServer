@@ -3,11 +3,17 @@ const {
   createCoupon,
   getAllCoupons,
   updateCoupon,
-  deleteCoupon
+  deleteCoupon,
+  validateCoupon,
+  checkDemoStatus
 } = require('../controllers/coupon');
-const { isAuthenticated, isAdmin } = require('../middleware/authMiddleware');
+const { isAuthenticated, isAdmin, isOptionalAuthenticated } = require('../middleware/authMiddleware');
 
 const router = express.Router();
+
+// Public routes (for app)
+router.post('/validate', isAuthenticated, validateCoupon);
+router.get('/demo-status', isOptionalAuthenticated, checkDemoStatus);
 
 // Admin only routes
 router.post('/', isAuthenticated, isAdmin, createCoupon);

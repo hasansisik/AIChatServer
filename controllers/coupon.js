@@ -563,7 +563,24 @@ const updateDemoMinutes = async (req, res, next) => {
     }
 
     // Update demo minutes remaining
-    user.demoMinutesRemaining = Math.max(0, Math.floor(minutes)); // Ensure non-negative integer
+    const finalMinutes = Math.max(0, Math.floor(minutes)); // Ensure non-negative integer
+    user.demoMinutesRemaining = finalMinutes;
+    
+    // Eğer demo süresi 0 veya daha azsa ve aktif kupon kodu demo kuponu ise, temizle
+    if (finalMinutes <= 0 && user.activeCouponCode) {
+      const couponCode = user.activeCouponCode;
+      const coupon = await Coupon.findOne({ code: couponCode });
+      // Eğer aktif kupon demo kuponu ise, temizle
+      if (coupon && coupon.isDemo) {
+        user.activeCouponCode = null;
+        // courseCode'u da temizle (eğer demo kuponu ise)
+        if (user.courseCode === couponCode) {
+          user.courseCode = null;
+        }
+        console.log(`🧹 Demo süresi bitti, kullanıcının aktif kupon kodları temizlendi: ${req.user.userId}`);
+      }
+    }
+    
     await user.save();
 
     return res.status(StatusCodes.OK).json({

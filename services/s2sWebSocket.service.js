@@ -1,5 +1,7 @@
 const WebSocket = require('ws');
 const aiService = require('./ai.service');
+const jwt = require('jsonwebtoken');
+const { User } = require('../models/User');
 
 class SpeechWebSocketService {
   constructor() {
@@ -14,12 +16,16 @@ class SpeechWebSocketService {
       perMessageDeflate: false
     });
 
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', async (ws, req) => {
       const clientId = `client_${Date.now()}`;
       
-      // Query parametrelerinden voice ve language bilgisini al
+      // Query parametrelerinden voice, language ve token bilgisini al
       let voiceFromQuery = null;
       let languageFromQuery = 'tr'; // Default: Türkçe
+      let tokenFromQuery = null;
+      let userId = null;
+      let user = null;
+      
       try {
         if (req.url && req.url.includes('?')) {
           const queryString = req.url.split('?')[1];
@@ -29,14 +35,34 @@ class SpeechWebSocketService {
           if (lang && (lang === 'tr' || lang === 'en')) {
             languageFromQuery = lang;
           }
+          tokenFromQuery = params.get('token');
         }
       } catch (error) {
         console.error('❌ Query parameter parse hatası:', error.message);
       }
       
+      // Token'dan user ID'yi al
+      if (tokenFromQuery) {
+        try {
+          const payload = jwt.verify(tokenFromQuery, process.env.ACCESS_TOKEN_SECRET);
+          userId = payload.userId;
+          console.log(`🔐 [Auth][${clientId}] User ID: ${userId}`);
+          
+          // User'ı bul ve demo süresini kontrol et
+          user = await User.findById(userId).select('demoMinutesRemaining activeCouponCode courseCode');
+          if (user && user.demoMinutesRemaining && user.demoMinutesRemaining > 0) {
+            console.log(`⏱️ [Demo][${clientId}] Demo süresi başlatıldı: ${user.demoMinutesRemaining} dakika`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ [Auth][${clientId}] Token geçersiz veya parse edilemedi:`, error.message);
+        }
+      }
+      
       const client = {
         ws,
         id: clientId,
+        userId: userId,
+        user: user,
         streamingSession: null,
         currentText: '',
         processingQueue: Promise.resolve(),
@@ -46,7 +72,10 @@ class SpeechWebSocketService {
         sttStart: null,
         llmStart: null,
         pendingChunks: [],
-        chunkProcessingTimer: null
+        chunkProcessingTimer: null,
+        demoStartTime: null, // Demo süresi başlangıç zamanı
+        demoInitialMinutes: null, // Demo başlangıç dakikası
+        demoTimerInterval: null // Demo timer interval
       };
 
       this.clients.set(clientId, client);
@@ -54,6 +83,11 @@ class SpeechWebSocketService {
         console.log(`✅ Socket bağlı [${client.id}] Voice: ${client.voice}, Language: ${client.language}`);
       } else {
         console.log(`⚠️ Socket bağlı [${client.id}] Voice bilgisi yok (query parameter), Language: ${client.language}, URL: ${req.url}`);
+      }
+
+      // Demo timer'ı başlat (eğer user varsa ve demo süresi varsa)
+      if (client.user && client.user.demoMinutesRemaining && client.user.demoMinutesRemaining > 0) {
+        this.startDemoTimer(client);
       }
 
       ws.on('message', async (data) => {
@@ -112,8 +146,10 @@ class SpeechWebSocketService {
         }
       });
 
-      ws.on('close', () => {
+      ws.on('close', async () => {
         console.log(`🔌 [Disconnect][${client.id}] Client bağlantısı kapandı`);
+        // Demo timer'ı durdur ve son kalan süreyi kaydet
+        await this.stopDemoTimer(client);
         this.cleanupClient(client);
         this.clients.delete(clientId);
       });
@@ -468,19 +504,163 @@ class SpeechWebSocketService {
     }
   }
 
+  // Demo timer başlat
+  startDemoTimer(client) {
+    if (!client.user || !client.user.demoMinutesRemaining || client.user.demoMinutesRemaining <= 0) {
+      return;
+    }
+
+    // Demo timer zaten çalışıyorsa, durdur
+    if (client.demoTimerInterval) {
+      clearInterval(client.demoTimerInterval);
+    }
+
+    // Başlangıç zamanını ve başlangıç dakikasını kaydet
+    client.demoStartTime = Date.now();
+    client.demoInitialMinutes = client.user.demoMinutesRemaining;
+    
+    console.log(`⏱️ [Demo Timer][${client.id}] Başlatıldı: ${client.demoInitialMinutes} dakika`);
+
+    // Her saniye demo süresini düş
+    client.demoTimerInterval = setInterval(async () => {
+      if (!client.user || !client.demoStartTime || !client.demoInitialMinutes) {
+        return;
+      }
+
+      const now = Date.now();
+      const elapsedMs = now - client.demoStartTime;
+      const elapsedMinutes = elapsedMs / (1000 * 60);
+      const remainingMinutes = Math.max(0, client.demoInitialMinutes - elapsedMinutes);
+
+      // User'ı güncelle (her saniye DB'ye yazmak yerine, her 10 saniyede bir yaz)
+      const elapsedSeconds = Math.floor((now - (client.lastDemoUpdate || client.demoStartTime)) / 1000);
+      
+      if (elapsedSeconds >= 10 || remainingMinutes === 0) {
+        try {
+          // User'ı yeniden yükle (güncel demo süresini al)
+          const updatedUser = await User.findById(client.userId).select('demoMinutesRemaining');
+          if (updatedUser) {
+            // Eğer backend'de demo süresi değişmişse (örneğin admin tarafından), güncelle
+            if (updatedUser.demoMinutesRemaining !== client.user.demoMinutesRemaining) {
+              client.demoInitialMinutes = updatedUser.demoMinutesRemaining;
+              client.demoStartTime = Date.now();
+              console.log(`🔄 [Demo Timer][${client.id}] Demo süresi güncellendi: ${updatedUser.demoMinutesRemaining} dakika`);
+            }
+            
+            // Kalan süreyi hesapla ve güncelle
+            const currentElapsed = (Date.now() - client.demoStartTime) / (1000 * 60);
+            const currentRemaining = Math.max(0, client.demoInitialMinutes - currentElapsed);
+            
+            updatedUser.demoMinutesRemaining = Math.max(0, Math.floor(currentRemaining));
+            await updatedUser.save();
+            
+            client.user.demoMinutesRemaining = updatedUser.demoMinutesRemaining;
+            client.lastDemoUpdate = now;
+            
+            console.log(`💾 [Demo Timer][${client.id}] Demo süresi güncellendi: ${updatedUser.demoMinutesRemaining} dakika`);
+          }
+        } catch (error) {
+          console.error(`❌ [Demo Timer][${client.id}] Demo süresi güncellenemedi:`, error.message);
+        }
+      }
+
+      // Frontend'e güncel süreyi gönder (her saniye)
+      this.sendMessage(client.ws, {
+        type: 'demo_timer_update',
+        minutesRemaining: remainingMinutes
+      });
+
+      // Eğer demo süresi 0 olduysa, aktif kupon kodlarını temizle
+      if (remainingMinutes <= 0 && client.user && client.userId) {
+        try {
+          const user = await User.findById(client.userId);
+          if (user && user.activeCouponCode) {
+            const couponCode = user.activeCouponCode;
+            const Coupon = require('../models/Coupon');
+            const coupon = await Coupon.findOne({ code: couponCode });
+            // Eğer aktif kupon demo kuponu ise, temizle
+            if (coupon && coupon.isDemo) {
+              user.activeCouponCode = null;
+              if (user.courseCode === couponCode) {
+                user.courseCode = null;
+              }
+              await user.save();
+              console.log(`🧹 [Demo Timer][${client.id}] Demo süresi bitti, aktif kupon kodları temizlendi`);
+            }
+          }
+        } catch (error) {
+          console.error(`❌ [Demo Timer][${client.id}] Kupon kodları temizlenemedi:`, error.message);
+        }
+      }
+    }, 1000); // Her saniye
+  }
+
+  // Demo timer durdur
+  async stopDemoTimer(client) {
+    if (client.demoTimerInterval) {
+      clearInterval(client.demoTimerInterval);
+      client.demoTimerInterval = null;
+    }
+
+    if (client.user && client.userId && client.demoStartTime && client.demoInitialMinutes) {
+      try {
+        const now = Date.now();
+        const elapsedMs = now - client.demoStartTime;
+        const elapsedMinutes = elapsedMs / (1000 * 60);
+        const remainingMinutes = Math.max(0, client.demoInitialMinutes - elapsedMinutes);
+
+        // Son kalan süreyi kaydet
+        const user = await User.findById(client.userId);
+        if (user) {
+          user.demoMinutesRemaining = Math.max(0, Math.floor(remainingMinutes));
+          
+          // Eğer demo süresi 0 olduysa, aktif kupon kodlarını temizle
+          if (user.demoMinutesRemaining <= 0 && user.activeCouponCode) {
+            const couponCode = user.activeCouponCode;
+            const Coupon = require('../models/Coupon');
+            const coupon = await Coupon.findOne({ code: couponCode });
+            // Eğer aktif kupon demo kuponu ise, temizle
+            if (coupon && coupon.isDemo) {
+              user.activeCouponCode = null;
+              if (user.courseCode === couponCode) {
+                user.courseCode = null;
+              }
+              console.log(`🧹 [Demo Timer][${client.id}] Demo süresi bitti, aktif kupon kodları temizlendi`);
+            }
+          }
+          
+          await user.save();
+          console.log(`💾 [Demo Timer][${client.id}] Socket kapandı, son kalan süre kaydedildi: ${user.demoMinutesRemaining} dakika`);
+        }
+      } catch (error) {
+        console.error(`❌ [Demo Timer][${client.id}] Son kalan süre kaydedilemedi:`, error.message);
+      }
+    }
+
+    client.demoStartTime = null;
+    client.demoInitialMinutes = null;
+    client.lastDemoUpdate = null;
+  }
+
   cleanupClient(client) {
-    // 1. Chunk processing timer'ı iptal et
+    // 1. Demo timer'ı durdur
+    if (client.demoTimerInterval) {
+      clearInterval(client.demoTimerInterval);
+      client.demoTimerInterval = null;
+    }
+    
+    // 2. Chunk processing timer'ı iptal et
     if (client.chunkProcessingTimer) {
       clearTimeout(client.chunkProcessingTimer);
       client.chunkProcessingTimer = null;
     }
     
-    // 2. Pending chunk'ları temizle
+    // 3. Pending chunk'ları temizle
     if (client.pendingChunks) {
       client.pendingChunks = [];
     }
     
-    // 3. STT session'ı kapat (ÖNEMLİ!)
+    // 4. STT session'ı kapat (ÖNEMLİ!)
     if (client.streamingSession) {
       try {
         console.log(`🧹 [Cleanup][${client.id}] STT session kapatılıyor...`);
@@ -493,7 +673,7 @@ class SpeechWebSocketService {
       }
     }
     
-    // 4. Client state'ini temizle
+    // 5. Client state'ini temizle
     client.currentText = '';
     client.lastSentText = '';
     client.sttStart = null;

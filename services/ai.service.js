@@ -59,21 +59,40 @@ class AIService {
   initializeSpeechClient() {
     try {
       const speechOptions = {};
-      const inlineCredential = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-
-      if (inlineCredential) {
-        speechOptions.credentials = JSON.parse(inlineCredential);
+      
+      // service.json dosyasını direkt oku
+      const localServicePath = path.resolve(__dirname, '..', 'service.json');
+      
+      if (fs.existsSync(localServicePath)) {
+        try {
+          const serviceJsonContent = fs.readFileSync(localServicePath, 'utf8');
+          const credentials = JSON.parse(serviceJsonContent);
+          speechOptions.credentials = credentials;
+          console.log(`🔐 Google STT credentials: service.json dosyasından yüklendi`);
+        } catch (parseError) {
+          console.error('❌ service.json parse edilemedi:', parseError.message);
+          // Fallback: keyFilename kullan
+          speechOptions.keyFilename = localServicePath;
+          console.log(`🔐 Google STT credentials: keyFilename olarak kullanılıyor: ${localServicePath}`);
+        }
       } else {
+        // Fallback: environment variable veya diğer yollar
         const explicitPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_STT_CREDENTIALS_PATH;
-        const localServicePath = path.resolve(__dirname, '..', 'service.json');
         const siblingAppPath = path.resolve(__dirname, '..', '..', 'AIChatApp', 'service.json');
 
-        const candidatePaths = [explicitPath, localServicePath, siblingAppPath].filter(Boolean);
+        const candidatePaths = [explicitPath, siblingAppPath].filter(Boolean);
         const existingPath = candidatePaths.find((candidatePath) => fs.existsSync(candidatePath));
 
         if (existingPath) {
-          speechOptions.keyFilename = existingPath;
-          console.log(`🔐 Google STT credentials: ${existingPath}`);
+          try {
+            const serviceJsonContent = fs.readFileSync(existingPath, 'utf8');
+            const credentials = JSON.parse(serviceJsonContent);
+            speechOptions.credentials = credentials;
+            console.log(`🔐 Google STT credentials: ${existingPath} dosyasından yüklendi`);
+          } catch (parseError) {
+            speechOptions.keyFilename = existingPath;
+            console.log(`🔐 Google STT credentials: keyFilename olarak kullanılıyor: ${existingPath}`);
+          }
         } else {
           console.warn('⚠️ Google STT credential dosyası bulunamadı. Varsayılan ADC kullanılacak.');
         }

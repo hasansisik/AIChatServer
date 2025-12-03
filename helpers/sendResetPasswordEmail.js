@@ -7,7 +7,7 @@ const sendResetPasswordEmail = async ({ name, email, passwordToken }) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Şifre Sıfırlama - TUA AI</title>
+      <title>Şifre Sıfırlama - Kamila</title>
     </head>
     <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
       <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5; padding: 20px;">
@@ -17,7 +17,7 @@ const sendResetPasswordEmail = async ({ name, email, passwordToken }) => {
               <!-- Header -->
               <tr>
                 <td style="background-color: #764ba2; padding: 40px 30px; text-align: center;">
-                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">TUA AI</h1>
+                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Kamila</h1>
                   <p style="margin: 10px 0 0 0; color: #ffffff; font-size: 14px; opacity: 0.9;">Şifre Sıfırlama</p>
                 </td>
               </tr>
@@ -27,7 +27,7 @@ const sendResetPasswordEmail = async ({ name, email, passwordToken }) => {
                 <td style="padding: 40px 30px;">
                   <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 24px; font-weight: 600;">Merhaba ${name},</h2>
                   <p style="margin: 0 0 20px 0; color: #666666; font-size: 16px; line-height: 1.6;">
-                    TUA AI hesabınızın şifresini sıfırlamak için aşağıdaki doğrulama kodunu kullanabilirsiniz.
+                    Kamila hesabınızın şifresini sıfırlamak için aşağıdaki doğrulama kodunu kullanabilirsiniz.
                   </p>
                   
                   <!-- Reset Code Box -->
@@ -48,7 +48,7 @@ const sendResetPasswordEmail = async ({ name, email, passwordToken }) => {
                   
                   <div style="margin-top: 30px; padding: 20px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
                     <p style="margin: 0; color: #856404; font-size: 14px; line-height: 1.6;">
-                      <strong>Güvenlik Uyarısı:</strong> Şifre sıfırlama kodunuzu kimseyle paylaşmayın. TUA AI hiçbir zaman sizden şifre veya doğrulama kodunuzu istemez.
+                      <strong>Güvenlik Uyarısı:</strong> Şifre sıfırlama kodunuzu kimseyle paylaşmayın. Kamila hiçbir zaman sizden şifre veya doğrulama kodunuzu istemez.
                     </p>
                   </div>
                 </td>
@@ -58,7 +58,7 @@ const sendResetPasswordEmail = async ({ name, email, passwordToken }) => {
               <tr>
                 <td style="padding: 30px; background-color: #f9f9f9; border-top: 1px solid #eeeeee; text-align: center;">
                   <p style="margin: 0 0 10px 0; color: #999999; font-size: 12px;">
-                    © ${new Date().getFullYear()} TUA AI. Tüm hakları saklıdır.
+                    © ${new Date().getFullYear()} Kamila. Tüm hakları saklıdır.
                   </p>
                   <p style="margin: 0; color: #999999; font-size: 12px;">
                     Bu e-posta otomatik olarak gönderilmiştir. Lütfen yanıtlamayın.
@@ -75,7 +75,7 @@ const sendResetPasswordEmail = async ({ name, email, passwordToken }) => {
 
     return sendEmail({
         to: email,
-        subject: 'TUA AI - Şifre Sıfırlama Kodu',
+        subject: 'Kamila - Şifre Sıfırlama Kodu',
         html: htmlTemplate,
     });
 };

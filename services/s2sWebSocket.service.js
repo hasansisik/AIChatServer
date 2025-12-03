@@ -540,24 +540,36 @@ class SpeechWebSocketService {
           // User'ı yeniden yükle (güncel demo süresini al)
           const updatedUser = await User.findById(client.userId).select('demoMinutesRemaining');
           if (updatedUser) {
-            // Eğer backend'de demo süresi değişmişse (örneğin admin tarafından), güncelle
-            if (updatedUser.demoMinutesRemaining !== client.user.demoMinutesRemaining) {
-              client.demoInitialMinutes = updatedUser.demoMinutesRemaining;
+            // Hesaplanmış kalan süre
+            const calculatedRemaining = Math.max(0, Math.floor(remainingMinutes));
+            
+            // DB'deki değer ile hesaplanmış değer arasındaki fark
+            const dbValue = updatedUser.demoMinutesRemaining || 0;
+            const difference = Math.abs(dbValue - calculatedRemaining);
+            
+            // Eğer fark çok büyükse (örneğin admin tarafından güncellenmişse, 1 dakikadan fazla fark)
+            // O zaman timer'ı resetle
+            if (difference > 1 && dbValue > calculatedRemaining) {
+              // Admin tarafından süre eklenmiş, timer'ı resetle
+              client.demoInitialMinutes = dbValue;
               client.demoStartTime = Date.now();
-              console.log(`🔄 [Demo Timer][${client.id}] Demo süresi güncellendi: ${updatedUser.demoMinutesRemaining} dakika`);
+              client.lastDemoUpdate = null; // Reset last update time
+              console.log(`🔄 [Demo Timer][${client.id}] Demo süresi admin tarafından güncellendi: ${dbValue} dakika (fark: ${difference.toFixed(2)} dakika)`);
             }
             
-            // Kalan süreyi hesapla ve güncelle
+            // Kalan süreyi hesapla ve güncelle (timer resetlenmişse yeni değer, değilse mevcut hesaplama)
             const currentElapsed = (Date.now() - client.demoStartTime) / (1000 * 60);
             const currentRemaining = Math.max(0, client.demoInitialMinutes - currentElapsed);
+            const finalRemaining = Math.max(0, Math.floor(currentRemaining));
             
-            updatedUser.demoMinutesRemaining = Math.max(0, Math.floor(currentRemaining));
+            // Sadece hesaplanmış değeri DB'ye yaz (admin tarafından güncellenmişse zaten yukarıda resetlendi)
+            updatedUser.demoMinutesRemaining = finalRemaining;
             await updatedUser.save();
             
-            client.user.demoMinutesRemaining = updatedUser.demoMinutesRemaining;
+            client.user.demoMinutesRemaining = finalRemaining;
             client.lastDemoUpdate = now;
             
-            console.log(`💾 [Demo Timer][${client.id}] Demo süresi güncellendi: ${updatedUser.demoMinutesRemaining} dakika`);
+            console.log(`💾 [Demo Timer][${client.id}] Demo süresi DB'ye kaydedildi: ${finalRemaining} dakika`);
           }
         } catch (error) {
           console.error(`❌ [Demo Timer][${client.id}] Demo süresi güncellenemedi:`, error.message);

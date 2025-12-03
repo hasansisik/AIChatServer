@@ -475,6 +475,9 @@ const editProfile = async (req, res) => {
       user.auth.verificationCode = verificationCode;
       user.isVerified = false;
 
+      // Save auth document to persist verification code
+      await user.auth.save();
+
       await sendVerificationEmail({
         name: user.name,
         email: user.email,
@@ -638,6 +641,12 @@ const editProfile = async (req, res) => {
 const verifyEmail = async (req, res) => {
   try {
     const { email, verificationCode } = req.body;
+
+    // Validate input
+    if (!email || !verificationCode) {
+      return res.status(400).json({ message: "E-posta ve doğrulama kodu gereklidir." });
+    }
+
     const user = await User.findOne({ email })
       .populate("auth")
       .populate("profile");
@@ -646,7 +655,20 @@ const verifyEmail = async (req, res) => {
       return res.status(400).json({ message: "Kullanıcı bulunamadı." });
     }
 
-    if (user.auth.verificationCode !== Number(verificationCode)) {
+    if (!user.auth) {
+      return res.status(400).json({ message: "Kullanıcı kimlik doğrulama bilgisi bulunamadı." });
+    }
+
+    // Convert both to numbers for comparison
+    const codeFromDB = Number(user.auth.verificationCode);
+    const codeFromRequest = Number(verificationCode);
+
+    // Check if conversion was successful
+    if (isNaN(codeFromRequest)) {
+      return res.status(400).json({ message: "Geçersiz doğrulama kodu formatı." });
+    }
+
+    if (isNaN(codeFromDB) || codeFromDB !== codeFromRequest) {
       return res.status(400).json({ message: "Doğrulama kodu yanlış." });
     }
 
@@ -717,15 +739,21 @@ const againEmail = async (req, res) => {
     throw new Error("Kullanıcı bulunamadı.");
   }
 
-  const verificationCode = Math.floor(1000 + Math.random() * 9000);
-
-  user.auth.verificationCode = verificationCode;
-  await user.auth.save();
+  // If user already has a verification code, reuse it instead of creating a new one
+  // This ensures consistency when user resends email after edit-profile
+  let verificationCode = user.auth.verificationCode;
+  
+  if (!verificationCode) {
+    // Only create new code if one doesn't exist
+    verificationCode = Math.floor(1000 + Math.random() * 9000);
+    user.auth.verificationCode = verificationCode;
+    await user.auth.save();
+  }
 
   await sendVerificationEmail({
     name: user.name,
     email: user.email,
-    verificationCode: user.auth.verificationCode,
+    verificationCode: verificationCode,
   });
   res.json({ message: "Doğrulama kodu Gönderildi" });
 };

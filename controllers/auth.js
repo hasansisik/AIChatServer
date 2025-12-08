@@ -19,6 +19,11 @@ const register = async (req, res, next) => {
       expoPushToken,
     } = req.body;
 
+    // Validate required fields
+    if (!name || !surname || !email || !password) {
+      throw new CustomError.BadRequestError("Lütfen tüm gerekli alanları doldurun (isim, soyisim, e-posta, şifre).");
+    }
+
     //check email
     const emailAlreadyExists = await User.findOne({ email });
     if (emailAlreadyExists) {

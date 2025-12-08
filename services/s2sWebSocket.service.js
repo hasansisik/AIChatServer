@@ -523,6 +523,15 @@ class SpeechWebSocketService {
 
     // Her saniye demo süresini düş
     client.demoTimerInterval = setInterval(async () => {
+      // WebSocket kapalıysa veya client Map'te yoksa, interval'ı temizle ve çık
+      if (!client.ws || client.ws.readyState !== WebSocket.OPEN || !this.clients.has(client.id)) {
+        if (client.demoTimerInterval) {
+          clearInterval(client.demoTimerInterval);
+          client.demoTimerInterval = null;
+        }
+        return;
+      }
+
       if (!client.user || !client.demoStartTime || !client.demoInitialMinutes) {
         return;
       }

@@ -38,7 +38,7 @@ const register = async (req, res, next) => {
     // Create Profile document
     const profile = new Profile({
       picture:
-        picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+        picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
     });
     await profile.save();
 
@@ -197,7 +197,7 @@ const login = async (req, res, next) => {
         role: user.role,
         picture:
           user.profile?.picture ||
-          "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+          "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
         profile: user.profile, // Add full profile object
         status: user.status,
         courseTrial: user.courseTrial,
@@ -715,7 +715,7 @@ const verifyEmail = async (req, res) => {
         email: user.email,
         picture:
           user.profile?.picture ||
-          "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+          "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
         profile: user.profile,
         status: user.status,
         courseTrial: user.courseTrial,
@@ -821,7 +821,7 @@ const googleAuth = async (req, res, next) => {
 
       // Create Profile document
       const profile = new Profile({
-        picture: "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+        picture: "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
       });
       await profile.save();
 
@@ -893,7 +893,7 @@ const googleAuth = async (req, res, next) => {
         name: user.name,
         surname: user.surname,
         email: user.email,
-        picture: user.profile?.picture || picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+        picture: user.profile?.picture || picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
         profile: user.profile, // Add full profile object
         status: user.status,
         courseTrial: user.courseTrial,
@@ -971,7 +971,7 @@ const googleLogin = async (req, res, next) => {
         name: user.name,
         surname: user.surname,
         email: user.email,
-        picture: user.profile?.picture || picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+        picture: user.profile?.picture || picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
         profile: user.profile, // Add full profile object
         status: user.status,
         courseTrial: user.courseTrial,
@@ -1011,7 +1011,7 @@ const googleRegister = async (req, res, next) => {
 
     // Create Profile document
     const profile = new Profile({
-      picture: picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+      picture: picture || "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
     });
     await profile.save();
 
@@ -1235,7 +1235,7 @@ const createAdminUser = async (req, res, next) => {
 
     // Create Profile document
     const profile = new Profile({
-      picture: "https://res.cloudinary.com/da2qwsrbv/image/upload/v1760394529/tuaai_xgpwsd.png",
+      picture: "https://res.cloudinary.com/da2qwsrbv/image/upload/v1765201248/kamila_bqltdh.png",
     });
     await profile.save();
 

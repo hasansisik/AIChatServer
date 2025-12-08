@@ -1353,6 +1353,57 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+// Add Demo Minutes (Admin only)
+const addDemoMinutes = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { minutes } = req.body;
+
+    // Validate required fields
+    if (!minutes || isNaN(parseInt(minutes)) || parseInt(minutes) <= 0) {
+      throw new CustomError.BadRequestError("Lütfen geçerli bir dakika değeri girin");
+    }
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      throw new CustomError.NotFoundError("Kullanıcı bulunamadı");
+    }
+
+    const minutesToAdd = parseInt(minutes);
+
+    // If user already has demo minutes, add to it; otherwise set new
+    if (user.demoMinutesRemaining && user.demoMinutesRemaining > 0) {
+      // Extend existing demo
+      user.demoMinutesRemaining = user.demoMinutesRemaining + minutesToAdd;
+    } else {
+      // Start new demo
+      user.demoMinutesRemaining = minutesToAdd;
+    }
+
+    await user.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: `${minutesToAdd} dakika demo süresi başarıyla eklendi`,
+      user: {
+        _id: user._id,
+        name: user.name,
+        surname: user.surname,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        courseCode: user.courseCode,
+        demoMinutesRemaining: user.demoMinutesRemaining,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 //Update Onboarding Data
 const updateOnboardingData = async (req, res, next) => {
   try {
@@ -1510,6 +1561,7 @@ module.exports = {
   getMyProfile,
   getAllUsers,
   againEmail,
+  addDemoMinutes,
   editProfile,
   deleteAccount,
   deleteUser,

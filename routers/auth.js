@@ -1,5 +1,5 @@
 const express = require('express');
-const {register,googleRegister,googleAuth,login,googleLogin,getMyProfile,getAllUsers,logout,forgotPassword,resetPassword,verifyEmail,againEmail,editProfile,deleteAccount,deleteUser,updateUserRole,updateUserStatus,createAdminUser,updateUser,updateOnboardingData,addFavoriteAI,removeFavoriteAI,getFavoriteAIs} = require('../controllers/auth');
+const {register,googleRegister,googleAuth,login,googleLogin,getMyProfile,getAllUsers,logout,forgotPassword,resetPassword,verifyEmail,againEmail,editProfile,deleteAccount,deleteUser,updateUserRole,updateUserStatus,createAdminUser,updateUser,addDemoMinutes,updateOnboardingData,addFavoriteAI,removeFavoriteAI,getFavoriteAIs} = require('../controllers/auth');
 const {isAuthenticated, isAdmin} = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -29,5 +29,6 @@ router.patch('/users/:id', isAuthenticated, isAdmin, updateUser);
 router.delete('/users/:id', isAuthenticated, isAdmin, deleteUser);
 router.patch('/users/:id/role', isAuthenticated, isAdmin, updateUserRole);
 router.patch('/users/:id/status', isAuthenticated, isAdmin, updateUserStatus);
+router.patch('/users/:id/demo-minutes', isAuthenticated, isAdmin, addDemoMinutes);
 
 module.exports = router;

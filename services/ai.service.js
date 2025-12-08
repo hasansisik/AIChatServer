@@ -26,16 +26,16 @@ class AIService {
     try {
       const settings = await Settings.getSettings();
       this.settingsCache = {
-        openaiApiKey: settings.openaiApiKey || process.env.OPENAI_API_KEY || null,
+        openaiApiKey: settings.openaiApiKey || null,
         googleCredentialsJson: settings.googleCredentialsJson || null,
         lastUpdated: settings.updatedAt || new Date()
       };
       this.speechClient = this.initializeSpeechClient();
       this.openai = this.initializeOpenAI();
     } catch (error) {
-      console.error('❌ Settings yüklenemedi, env değerleri kullanılıyor:', error.message);
+      console.error('❌ Settings yüklenemedi:', error.message);
       this.settingsCache = {
-        openaiApiKey: process.env.OPENAI_API_KEY || null,
+        openaiApiKey: null,
         googleCredentialsJson: null,
         lastUpdated: null
       };
@@ -60,7 +60,7 @@ class AIService {
       const googleChanged = this.settingsCache.googleCredentialsJson !== settings.googleCredentialsJson;
 
       this.settingsCache = {
-        openaiApiKey: settings.openaiApiKey || process.env.OPENAI_API_KEY || null,
+        openaiApiKey: settings.openaiApiKey || null,
         googleCredentialsJson: settings.googleCredentialsJson || null,
         lastUpdated: newUpdatedAt
       };
@@ -146,24 +146,20 @@ class AIService {
           console.log(`🔐 Google STT credentials: keyFilename olarak kullanılıyor: ${localServicePath}`);
         }
       } else {
-        const explicitPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_STT_CREDENTIALS_PATH;
         const siblingAppPath = path.resolve(__dirname, '..', '..', 'AIChatApp', 'service.json');
 
-        const candidatePaths = [explicitPath, siblingAppPath].filter(Boolean);
-        const existingPath = candidatePaths.find((candidatePath) => fs.existsSync(candidatePath));
-
-        if (existingPath) {
+        if (fs.existsSync(siblingAppPath)) {
           try {
-            const serviceJsonContent = fs.readFileSync(existingPath, 'utf8');
+            const serviceJsonContent = fs.readFileSync(siblingAppPath, 'utf8');
             const credentials = JSON.parse(serviceJsonContent);
             speechOptions.credentials = credentials;
-            console.log(`🔐 Google STT credentials: ${existingPath} dosyasından yüklendi`);
+            console.log(`🔐 Google STT credentials: ${siblingAppPath} dosyasından yüklendi`);
           } catch (parseError) {
-            speechOptions.keyFilename = existingPath;
-            console.log(`🔐 Google STT credentials: keyFilename olarak kullanılıyor: ${existingPath}`);
+            speechOptions.keyFilename = siblingAppPath;
+            console.log(`🔐 Google STT credentials: keyFilename olarak kullanılıyor: ${siblingAppPath}`);
           }
         } else {
-          console.warn('⚠️ Google STT credential dosyası bulunamadı. Varsayılan ADC kullanılacak.');
+          console.warn('⚠️ Google STT credential dosyası bulunamadı. Settings\'ten veya service.json\'dan yüklenmeli.');
         }
       }
 
@@ -176,9 +172,9 @@ class AIService {
 
   initializeOpenAI() {
     try {
-      const apiKey = this.settingsCache.openaiApiKey || process.env.OPENAI_API_KEY;
+      const apiKey = this.settingsCache.openaiApiKey;
       if (!apiKey) {
-        console.warn('⚠️ OpenAI API Key tanımlı değil. LLM/TTS devre dışı.');
+        console.warn('⚠️ OpenAI API Key tanımlı değil. LLM/TTS devre dışı. Lütfen admin panelinden ayarlayın.');
         return null;
       }
       console.log(`🔐 OpenAI API Key: Settings'ten yüklendi`);

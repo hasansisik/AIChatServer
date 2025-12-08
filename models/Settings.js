@@ -26,7 +26,7 @@ SettingsSchema.statics.getSettings = async function() {
   let settings = await this.findOne().select("+openaiApiKey +googleCredentialsJson");
   if (!settings) {
     const newSettings = new this({
-      openaiApiKey: process.env.OPENAI_API_KEY || "",
+      openaiApiKey: "",
       googleCredentialsJson: ""
     });
     await newSettings.save();

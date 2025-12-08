@@ -10,9 +10,7 @@ class AIService {
     ffmpeg.setFfmpegPath(ffmpegInstaller.path);
     this.speechClient = this.initializeSpeechClient();
     this.openai = this.initializeOpenAI();
-    // Eski geçici dosyaları temizle (başlangıçta ve periyodik olarak)
     this.cleanupTempFiles();
-    // Her 5 dakikada bir geçici dosyaları temizle
     setInterval(() => this.cleanupTempFiles(), 5 * 60 * 1000);
   }
 
@@ -31,14 +29,12 @@ class AIService {
         const filePath = path.join(tempDir, file);
         try {
           const stats = fs.statSync(filePath);
-          // 5 dakikadan eski dosyaları sil
           const fileAge = now - stats.mtimeMs;
           if (fileAge > 5 * 60 * 1000) {
             fs.unlinkSync(filePath);
             cleanedCount++;
           }
         } catch (error) {
-          // Dosya silinemezse veya okunamazsa, yine de silmeyi dene
           try {
             fs.unlinkSync(filePath);
             cleanedCount++;
@@ -60,7 +56,6 @@ class AIService {
     try {
       const speechOptions = {};
       
-      // service.json dosyasını direkt oku
       const localServicePath = path.resolve(__dirname, '..', 'service.json');
       
       if (fs.existsSync(localServicePath)) {
@@ -71,12 +66,10 @@ class AIService {
           console.log(`🔐 Google STT credentials: service.json dosyasından yüklendi`);
         } catch (parseError) {
           console.error('❌ service.json parse edilemedi:', parseError.message);
-          // Fallback: keyFilename kullan
           speechOptions.keyFilename = localServicePath;
           console.log(`🔐 Google STT credentials: keyFilename olarak kullanılıyor: ${localServicePath}`);
         }
       } else {
-        // Fallback: environment variable veya diğer yollar
         const explicitPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_STT_CREDENTIALS_PATH;
         const siblingAppPath = path.resolve(__dirname, '..', '..', 'AIChatApp', 'service.json');
 
@@ -130,22 +123,18 @@ class AIService {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    // Audio buffer'ın binary data olduğundan emin ol
     if (!Buffer.isBuffer(audioBuffer)) {
       throw new Error('Audio buffer must be a Buffer');
     }
 
-    // Buffer boyutunu kontrol et - çok küçükse veya boşsa hata fırlatma
     if (audioBuffer.length === 0) {
       throw new Error('Audio buffer is empty');
     }
 
-    // Buffer'ın minimum boyutunu kontrol et (örneğin 100 byte'dan küçükse geçersiz olabilir)
     if (audioBuffer.length < 100) {
       throw new Error('Audio buffer is too small');
     }
 
-    // Geçici dosyaları temizleme fonksiyonu
     const cleanupFiles = () => {
       try {
         if (fs.existsSync(inputPath)) {
@@ -163,7 +152,6 @@ class AIService {
       }
     };
 
-    // Timeout ekle - 30 saniye sonra dosyaları temizle
     const cleanupTimeout = setTimeout(() => {
       console.warn(`⚠️ Geçici dosyalar timeout nedeniyle temizleniyor: ${inputPath}`);
       cleanupFiles();
@@ -210,7 +198,6 @@ class AIService {
       return null;
     }
 
-    // Language code mapping: 'tr' -> 'tr-TR', 'en' -> 'en-US'
     const languageCode = language === 'en' ? 'en-US' : 'tr-TR';
     const alternativeLanguageCodes = language === 'en' 
       ? ['tr-TR'] 
@@ -328,7 +315,7 @@ class AIService {
       voice: voice.trim(),
       input: text,
       format: 'mp3',
-      speed: Number(process.env.TTS_SPEED || 1.0) // Normal konuşma hızı: 1.0
+      speed: Number(process.env.TTS_SPEED || 1.0)
     });
 
     const arrayBuffer = await response.arrayBuffer();

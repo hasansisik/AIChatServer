@@ -4,14 +4,79 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const fs = require('fs');
 const path = require('path');
+const Settings = require('../models/Settings');
 
 class AIService {
   constructor() {
     ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-    this.speechClient = this.initializeSpeechClient();
-    this.openai = this.initializeOpenAI();
+    this.settingsCache = {
+      openaiApiKey: null,
+      googleCredentialsJson: null,
+      lastUpdated: null
+    };
+    this.speechClient = null;
+    this.openai = null;
+    this.initializeFromSettings();
     this.cleanupTempFiles();
     setInterval(() => this.cleanupTempFiles(), 5 * 60 * 1000);
+    setInterval(() => this.refreshSettings(), 30 * 1000);
+  }
+
+  async initializeFromSettings() {
+    try {
+      const settings = await Settings.getSettings();
+      this.settingsCache = {
+        openaiApiKey: settings.openaiApiKey || process.env.OPENAI_API_KEY || null,
+        googleCredentialsJson: settings.googleCredentialsJson || null,
+        lastUpdated: settings.updatedAt || new Date()
+      };
+      this.speechClient = this.initializeSpeechClient();
+      this.openai = this.initializeOpenAI();
+    } catch (error) {
+      console.error('❌ Settings yüklenemedi, env değerleri kullanılıyor:', error.message);
+      this.settingsCache = {
+        openaiApiKey: process.env.OPENAI_API_KEY || null,
+        googleCredentialsJson: null,
+        lastUpdated: null
+      };
+      this.speechClient = this.initializeSpeechClient();
+      this.openai = this.initializeOpenAI();
+    }
+  }
+
+  async refreshSettings() {
+    try {
+      const settings = await Settings.getSettings();
+      const newUpdatedAt = settings.updatedAt ? new Date(settings.updatedAt) : new Date();
+      
+      if (this.settingsCache.lastUpdated) {
+        const lastUpdated = new Date(this.settingsCache.lastUpdated);
+        if (newUpdatedAt.getTime() <= lastUpdated.getTime()) {
+          return;
+        }
+      }
+
+      const openaiChanged = this.settingsCache.openaiApiKey !== settings.openaiApiKey;
+      const googleChanged = this.settingsCache.googleCredentialsJson !== settings.googleCredentialsJson;
+
+      this.settingsCache = {
+        openaiApiKey: settings.openaiApiKey || process.env.OPENAI_API_KEY || null,
+        googleCredentialsJson: settings.googleCredentialsJson || null,
+        lastUpdated: newUpdatedAt
+      };
+
+      if (openaiChanged) {
+        console.log('🔄 OpenAI API Key güncellendi, client yeniden başlatılıyor...');
+        this.openai = this.initializeOpenAI();
+      }
+
+      if (googleChanged) {
+        console.log('🔄 Google Credentials güncellendi, client yeniden başlatılıyor...');
+        this.speechClient = this.initializeSpeechClient();
+      }
+    } catch (error) {
+      console.error('❌ Settings yenileme hatası:', error.message);
+    }
   }
 
   cleanupTempFiles() {
@@ -56,6 +121,17 @@ class AIService {
     try {
       const speechOptions = {};
       
+      if (this.settingsCache.googleCredentialsJson) {
+        try {
+          const credentials = JSON.parse(this.settingsCache.googleCredentialsJson);
+          speechOptions.credentials = credentials;
+          console.log(`🔐 Google STT credentials: Settings'ten yüklendi`);
+          return new SpeechClient(speechOptions);
+        } catch (parseError) {
+          console.error('❌ Settings\'teki Google credentials parse edilemedi:', parseError.message);
+        }
+      }
+
       const localServicePath = path.resolve(__dirname, '..', 'service.json');
       
       if (fs.existsSync(localServicePath)) {
@@ -100,12 +176,14 @@ class AIService {
 
   initializeOpenAI() {
     try {
-      if (!process.env.OPENAI_API_KEY) {
-        console.warn('⚠️ OPENAI_API_KEY tanımlı değil. LLM/TTS devre dışı.');
+      const apiKey = this.settingsCache.openaiApiKey || process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        console.warn('⚠️ OpenAI API Key tanımlı değil. LLM/TTS devre dışı.');
         return null;
       }
+      console.log(`🔐 OpenAI API Key: Settings'ten yüklendi`);
       return new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
+        apiKey: apiKey
       });
     } catch (error) {
       console.error('❌ OpenAI istemcisi oluşturulamadı:', error.message);

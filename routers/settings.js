@@ -12,3 +12,4 @@ router.patch('/', isAuthenticated, isAdmin, updateSettings);
 
 module.exports = router;
 
+

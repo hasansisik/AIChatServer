@@ -471,6 +471,12 @@ class SpeechWebSocketService {
     
     console.log(`⏱️ [Demo Timer][${client.id}] Başlatıldı: ${client.demoInitialMinutes} dakika`);
 
+    // İlk demo timer değerini hemen gönder
+    this.sendMessage(client.ws, {
+      type: 'demo_timer_update',
+      minutesRemaining: client.demoInitialMinutes
+    });
+
     client.demoTimerInterval = setInterval(async () => {
       if (!client.ws || client.ws.readyState !== WebSocket.OPEN || !this.clients.has(client.id)) {
         if (client.demoTimerInterval) {

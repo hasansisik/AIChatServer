@@ -529,26 +529,10 @@ class SpeechWebSocketService {
         minutesRemaining: remainingMinutes
       });
 
-      if (remainingMinutes <= 0 && client.user && client.userId) {
-        try {
-          const user = await User.findById(client.userId);
-          if (user && user.activeCouponCode) {
-            const couponCode = user.activeCouponCode;
-            const Coupon = require('../models/Coupon');
-            const coupon = await Coupon.findOne({ code: couponCode });
-            if (coupon && coupon.isDemo) {
-              user.activeCouponCode = null;
-              if (user.courseCode === couponCode) {
-                user.courseCode = null;
-              }
-              await user.save();
-              console.log(`🧹 [Demo Timer][${client.id}] Demo süresi bitti, aktif kupon kodları temizlendi`);
-            }
-          }
-        } catch (error) {
-          console.error(`❌ [Demo Timer][${client.id}] Kupon kodları temizlenemedi:`, error.message);
-        }
-      }
+      // Demo süresi bitince coupon'ı silme - coupon'ın kendi süresi (validUntil) var
+      // Coupon sadece geçersiz olduğunda (expired, deleted, inactive) temizlenecek
+      // checkDemoStatus fonksiyonunda bu kontrol yapılıyor
+      // Demo süresi bitince sadece demoMinutesRemaining 0 olur, coupon kalır
     }, 1000);
   }
 
@@ -569,18 +553,10 @@ class SpeechWebSocketService {
         if (user) {
           user.demoMinutesRemaining = Math.max(0, Math.floor(remainingMinutes));
           
-          if (user.demoMinutesRemaining <= 0 && user.activeCouponCode) {
-            const couponCode = user.activeCouponCode;
-            const Coupon = require('../models/Coupon');
-            const coupon = await Coupon.findOne({ code: couponCode });
-            if (coupon && coupon.isDemo) {
-              user.activeCouponCode = null;
-              if (user.courseCode === couponCode) {
-                user.courseCode = null;
-              }
-              console.log(`🧹 [Demo Timer][${client.id}] Demo süresi bitti, aktif kupon kodları temizlendi`);
-            }
-          }
+          // Demo süresi bitince coupon'ı silme - coupon'ın kendi süresi (validUntil) var
+          // Coupon sadece geçersiz olduğunda (expired, deleted, inactive) temizlenecek
+          // checkDemoStatus fonksiyonunda bu kontrol yapılıyor
+          // Demo süresi bitince sadece demoMinutesRemaining 0 olur, coupon kalır
           
           await user.save();
           console.log(`💾 [Demo Timer][${client.id}] Socket kapandı, son kalan süre kaydedildi: ${user.demoMinutesRemaining} dakika`);

@@ -510,7 +510,9 @@ const checkDemoStatus = async (req, res, next) => {
     // Check if user has active demo (demoMinutesRemaining > 0)
     const hasActiveDemo = user.demoMinutesRemaining && user.demoMinutesRemaining > 0;
     
-    // Check if purchase coupon is still valid
+    // Check if coupon (demo or purchase) is still valid
+    // Coupon sadece kendi süresi (validUntil) bittiğinde veya geçersiz olduğunda temizlenir
+    // Demo süresi bitince coupon silinmez, sadece demo erişimi biter
     let hasActivePurchase = false;
     if (user.activeCouponCode || user.courseCode) {
       const couponCode = user.activeCouponCode || user.courseCode;
@@ -518,9 +520,11 @@ const checkDemoStatus = async (req, res, next) => {
       const coupon = await Coupon.findOne({ code: couponCode });
       if (coupon && coupon.isValid()) {
         // Coupon exists and is valid (active status, not expired, not over usage limit)
+        // Demo kuponu olsa bile, eğer geçerliyse (validUntil kontrolü) coupon kalır
         hasActivePurchase = true;
       } else {
         // Coupon is invalid (deleted, expired, or inactive) - clear user's activeCouponCode
+        // Bu durumda hem demo hem purchase kuponları temizlenir
         user.activeCouponCode = null;
         user.courseCode = null;
         await user.save();
@@ -566,20 +570,9 @@ const updateDemoMinutes = async (req, res, next) => {
     const finalMinutes = Math.max(0, Math.floor(minutes)); // Ensure non-negative integer
     user.demoMinutesRemaining = finalMinutes;
     
-    // Eğer demo süresi 0 veya daha azsa ve aktif kupon kodu demo kuponu ise, temizle
-    if (finalMinutes <= 0 && user.activeCouponCode) {
-      const couponCode = user.activeCouponCode;
-      const coupon = await Coupon.findOne({ code: couponCode });
-      // Eğer aktif kupon demo kuponu ise, temizle
-      if (coupon && coupon.isDemo) {
-        user.activeCouponCode = null;
-        // courseCode'u da temizle (eğer demo kuponu ise)
-        if (user.courseCode === couponCode) {
-          user.courseCode = null;
-        }
-        console.log(`🧹 Demo süresi bitti, kullanıcının aktif kupon kodları temizlendi: ${req.user.userId}`);
-      }
-    }
+    // Demo süresi bitince coupon'ı silme - coupon'ın kendi süresi (validUntil) var
+    // Coupon sadece geçersiz olduğunda (expired, deleted, inactive) temizlenecek
+    // checkDemoStatus fonksiyonunda bu kontrol yapılıyor
     
     await user.save();
 

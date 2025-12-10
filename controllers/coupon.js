@@ -357,6 +357,33 @@ const deleteCoupon = async (req, res, next) => {
       throw new CustomError.NotFoundError("Kupon bulunamadı");
     }
 
+    const couponCode = coupon.code;
+
+    // Kuponu kullanan tüm kullanıcılardan kupon kodunu temizle
+    try {
+      const updateResult = await User.updateMany(
+        {
+          $or: [
+            { activeCouponCode: couponCode },
+            { courseCode: couponCode }
+          ]
+        },
+        {
+          $set: {
+            activeCouponCode: null,
+            courseCode: null
+          }
+        }
+      );
+      
+      if (updateResult.modifiedCount > 0) {
+        console.log(`🧹 Kupon silindi, ${updateResult.modifiedCount} kullanıcıdan kupon kodu temizlendi: ${couponCode}`);
+      }
+    } catch (userUpdateError) {
+      console.error("❌ Kullanıcılardan kupon kodu temizlenirken hata:", userUpdateError);
+      // Kupon silme işlemini devam ettir, kullanıcı güncellemesi hatası işlemi durdurmasın
+    }
+
     // Delete the coupon
     await Coupon.findByIdAndDelete(id);
 

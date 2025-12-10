@@ -70,19 +70,19 @@ const register = async (req, res, next) => {
 
     const accessToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.ACCESS_TOKEN_SECRET
     );
     const refreshToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.REFRESH_TOKEN_SECRET
     );
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       path: "/v1/auth/refreshtoken",
-      maxAge: 7 * 24 * 60 * 60 * 1000, //7 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, //1 year
     });
 
     await sendVerificationEmail({
@@ -167,19 +167,19 @@ const login = async (req, res, next) => {
 
     const accessToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.ACCESS_TOKEN_SECRET
     );
     const refreshToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.REFRESH_TOKEN_SECRET
     );
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       path: "/v1/auth/refreshtoken",
-      maxAge: 7 * 24 * 60 * 60 * 1000, //7 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, //1 year
     });
 
     const token = new Token({
@@ -686,19 +686,19 @@ const verifyEmail = async (req, res) => {
     // Generate tokens like login
     const accessToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.ACCESS_TOKEN_SECRET
     );
     const refreshToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.REFRESH_TOKEN_SECRET
     );
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       path: "/v1/auth/refreshtoken",
-      maxAge: 7 * 24 * 60 * 60 * 1000, //7 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, //1 year
     });
 
     const token = new Token({
@@ -866,19 +866,19 @@ const googleAuth = async (req, res, next) => {
     // Generate tokens
     const accessToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.ACCESS_TOKEN_SECRET
     );
     const refreshToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.REFRESH_TOKEN_SECRET
     );
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       path: "/v1/auth/refreshtoken",
-      maxAge: 7 * 24 * 60 * 60 * 1000, //7 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, //1 year
     });
 
     const token = new Token({
@@ -944,19 +944,19 @@ const googleLogin = async (req, res, next) => {
     // Generate tokens
     const accessToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.ACCESS_TOKEN_SECRET
     );
     const refreshToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.REFRESH_TOKEN_SECRET
     );
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       path: "/v1/auth/refreshtoken",
-      maxAge: 7 * 24 * 60 * 60 * 1000, //7 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, //1 year
     });
 
     const token = new Token({
@@ -1042,19 +1042,19 @@ const googleRegister = async (req, res, next) => {
 
     const accessToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.ACCESS_TOKEN_SECRET
     );
     const refreshToken = await generateToken(
       { userId: user._id, role: user.role },
-      "7d",
+      "365d",
       process.env.REFRESH_TOKEN_SECRET
     );
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       path: "/v1/auth/refreshtoken",
-      maxAge: 7 * 24 * 60 * 60 * 1000, //7 days
+      maxAge: 365 * 24 * 60 * 60 * 1000, //1 year
     });
 
     res.json({

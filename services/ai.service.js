@@ -273,20 +273,33 @@ class AIService {
     }
 
     const languageCode = language === 'en' ? 'en-US' : 'tr-TR';
+    
+    // İngilizce seçildiğinde sadece İngilizce varyantları ekle
+    // Türkçe seçildiğinde alternatif dil ekleme (daha iyi Türkçe algılama için)
     const alternativeLanguageCodes = language === 'en' 
-      ? ['tr-TR'] 
-      : ['en-US'];
+      ? ['en-GB', 'en-AU', 'en-CA'] // İngilizce varyantları
+      : []; // Türkçe için alternatif yok
+
+    const config = {
+      languageCode: languageCode,
+      enableAutomaticPunctuation: true,
+      model: process.env.GOOGLE_STT_MODEL || 'latest_long',
+      encoding: 'LINEAR16',
+      sampleRateHertz: 16000,
+      audioChannelCount: 1,
+      useEnhanced: true, // Gelişmiş model kullan (daha iyi algılama)
+      enableWordTimeOffsets: false,
+      enableWordConfidence: false,
+      maxAlternatives: 1, // Sadece en iyi sonucu al
+    };
+
+    // Sadece İngilizce için alternatif diller ekle
+    if (language === 'en' && alternativeLanguageCodes.length > 0) {
+      config.alternativeLanguageCodes = alternativeLanguageCodes;
+    }
 
     const request = {
-      config: {
-        languageCode: languageCode,
-        alternativeLanguageCodes: alternativeLanguageCodes,
-        enableAutomaticPunctuation: true,
-        model: process.env.GOOGLE_STT_MODEL || 'latest_long',
-        encoding: 'LINEAR16',
-        sampleRateHertz: 16000,
-        audioChannelCount: 1
-      },
+      config: config,
       interimResults: true
     };
 
@@ -295,18 +308,26 @@ class AIService {
         try {
           const result = data.results?.[0];
           const transcript = result?.alternatives?.[0]?.transcript?.trim();
+          const detectedLanguage = result?.languageCode || languageCode;
+          
           if (transcript) {
+            // Dil kontrolü: Eğer İngilizce bekliyorsak ve farklı dil algılandıysa uyar
+            if (language === 'en' && detectedLanguage && !detectedLanguage.startsWith('en')) {
+              console.warn(`⚠️ [STT] Beklenen: ${languageCode}, Algılanan: ${detectedLanguage}`);
+            }
+            
             onResult({
               text: transcript,
-              isFinal: Boolean(result?.isFinal)
+              isFinal: Boolean(result?.isFinal),
+              languageCode: detectedLanguage
             });
           }
         } catch (error) {
-          console.error('Streaming STT parse error:', error);
+          console.error('❌ [STT] Streaming parse error:', error);
         }
       })
       .on('error', (error) => {
-        console.error('Streaming STT error:', error);
+        console.error('❌ [STT] Streaming error:', error);
         onResult({
           error: true,
           message: error.message

@@ -197,9 +197,12 @@ class SpeechWebSocketService {
     }
 
     if (!client.streamingSession) {
+      const language = client.language || 'tr';
+      console.log(`🎤 [STT][${client.id}] STT oturumu başlatılıyor - Dil: ${language === 'en' ? 'İngilizce (en-US)' : 'Türkçe (tr-TR)'}`);
+      
       const session = aiService.createStreamingSession((result) => {
         this.handleStreamingResult(client, result);
-      }, client.language || 'tr');
+      }, language);
 
       if (!session) {
         console.warn(`⚠️ [Chunk][${client.id}] STT oturumu başlatılamadı`);

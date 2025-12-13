@@ -19,6 +19,7 @@ const authRouter = require('./routers/auth');
 const couponRouter = require('./routers/coupon');
 const onboardingRouter = require('./routers/onboarding');
 const settingsRouter = require('./routers/settings');
+const translateRouter = require('./routers/translate');
 
 //midlleware
 const notFoundMiddleware = require('./middleware/not-found')
@@ -47,6 +48,7 @@ app.use('/v1/auth', authRouter);
 app.use('/v1/coupons', couponRouter);
 app.use('/v1/onboardings', onboardingRouter);
 app.use('/v1/settings', settingsRouter);
+app.use('/v1/translate', translateRouter);
 
 app.use(notFoundMiddleware);
 app.use(erorHandlerMiddleware);
